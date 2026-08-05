@@ -300,7 +300,11 @@
   },
   "schedule": {
     "noTasksOnDay": "No completed tasks on this day",
-    "hoursUnit": "h"
+    "hoursUnit": "h",
+    "year": "Year",
+    "month": "Month",
+    "week": "Week",
+    "pinchHint": "Pinch to zoom"
   },
   "notifications": {
     "title": "Notifications",

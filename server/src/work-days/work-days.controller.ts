@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Put, Query, Request, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WorkDaysService } from './work-days.service';
 import { UpsertWorkDayDto } from './dto/work-day.dto';
@@ -12,12 +12,14 @@ export class WorkDaysController {
   constructor(private readonly workDays: WorkDaysService) {}
 
   @Get()
-  getMonth(
+  @ApiOperation({ summary: 'Work days for a month, or the whole year if `month` is omitted' })
+  getRange(
     @Request() req: any,
     @Query('year') year: string,
-    @Query('month') month: string,
+    @Query('month') month?: string,
   ) {
-    return this.workDays.getMonth(req.user.id, Number(year), Number(month));
+    const m = month ? Number(month) : undefined;
+    return this.workDays.getRange(req.user.id, Number(year), m);
   }
 
   @Put(':date')

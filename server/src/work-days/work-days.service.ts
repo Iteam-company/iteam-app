@@ -17,11 +17,21 @@ export class WorkDaysService {
     return user;
   }
 
-  async getMonth(userId: number, year: number, month: number) {
+  /**
+   * Work days + completed tasks for a range.
+   * Omit `month` to get the whole year — the year calendar view needs all 12
+   * months at once, and one query beats twelve round-trips.
+   */
+  async getRange(userId: number, year: number, month?: number) {
     const user = await this.requireUser(userId);
 
-    const start = new Date(Date.UTC(year, month - 1, 1));
-    const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+    const hasMonth = month != null && !Number.isNaN(month);
+    const start = hasMonth
+      ? new Date(Date.UTC(year, month! - 1, 1))
+      : new Date(Date.UTC(year, 0, 1));
+    const end = hasMonth
+      ? new Date(Date.UTC(year, month!, 0, 23, 59, 59, 999))
+      : new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const workDays = await (this.prisma as any).workDay.findMany({

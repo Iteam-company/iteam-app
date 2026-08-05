@@ -300,7 +300,11 @@
   },
   "schedule": {
     "noTasksOnDay": "Завершених задач у цей день немає",
-    "hoursUnit": "г"
+    "hoursUnit": "г",
+    "year": "Рік",
+    "month": "Місяць",
+    "week": "Тиждень",
+    "pinchHint": "Зведіть пальці для масштабу"
   },
   "notifications": {
     "title": "Сповіщення",
