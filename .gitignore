@@ -1,0 +1,58 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
+# No leading slash — matches node_modules anywhere in the tree (client/, server/, etc.)
+node_modules/
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+dist/
+build/
+.output/
+.vinxi/
+.nitro/
+.wrangler/
+
+# ── Generated files ───────────────────────────────────────────────────────────
+# Prisma v7 client (server/generated/)
+generated/
+# TanStack Router auto-generated route tree
+src/routeTree.gen.ts
+**/routeTree.gen.ts
+
+# ── TanStack / Vite cache ─────────────────────────────────────────────────────
+.tanstack/
+
+# ── Environment ───────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.pid
+*.pid.lock
+.temp/
+.tmp/

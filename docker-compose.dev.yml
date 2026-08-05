@@ -1,0 +1,93 @@
+services:
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-iteam}
+      POSTGRES_USER: ${DB_USER:-iteam}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-iteam} -d ${DB_NAME:-iteam}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  # ── NestJS API (hot reload) ──────────────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: dev              # stops at the dev stage, skips build + runner
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-4000}:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${DB_USER:-iteam}:${DB_PASSWORD:?}@db:5432/${DB_NAME:-iteam}
+    volumes:
+      - ./server/src:/app/src          # live source
+      - ./server/prisma:/app/prisma    # schema + migrations
+      - ./server/test:/app/test
+      # Prevent host node_modules from shadowing the container's
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+
+  # ── TanStack Start (HMR) ─────────────────────────────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      target: dev              # stops at the dev stage, skips build + runner
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      VITE_API_URL: http://localhost:${SERVER_PORT:-4000}
+    volumes:
+      # Mount the entire client dir as one bind mount so all paths share the
+      # same device — TanStack Router does an atomic rename from
+      # .tanstack/tmp/ → src/routeTree.gen.ts, which requires both to be
+      # on the same filesystem. Separate mounts = separate devices = EXDEV.
+      - ./client:/app
+      # Keep the container's node_modules (from npm ci in the image);
+      # the anonymous volume here shadows the bind mount at that subpath.
+      - /app/node_modules
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+
+volumes:
+  postgres_data:
