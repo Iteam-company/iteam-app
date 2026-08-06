@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, Loader2, Pencil } from 'lucide-react'
 import { Button } from '#/components/ui/button'
@@ -93,6 +95,11 @@ function utcDay(year: number, month1: number, day: number) {
   return new Date(Date.UTC(year, month1 - 1, day))
 }
 
+function todayUTC() {
+  const n = new Date()
+  return utcDay(n.getFullYear(), n.getMonth() + 1, n.getDate())
+}
+
 /** Mon-based index: 0=Mon … 6=Sun */
 function dowIndex(date: Date) {
   return (date.getUTCDay() + 6) % 7
@@ -109,9 +116,14 @@ function startOfWeek(date: Date) {
   return addDays(date, -dowIndex(date))
 }
 
-function getDowLabel(idx: number, locale: string, style: 'short' | 'long' = 'short') {
+function daysInMonthOf(year: number, month1: number) {
+  return new Date(Date.UTC(year, month1, 0)).getUTCDate()
+}
+
+function getDowLabel(idx: number, locale: string, style: 'short' | 'narrow' = 'short') {
   // April 13, 2026 is a Monday — use it as reference
-  return new Date(Date.UTC(2026, 3, 13 + idx)).toLocaleDateString(locale, { weekday: style })
+  return new Date(Date.UTC(2026, 3, 13 + idx))
+    .toLocaleDateString(locale, { weekday: style, timeZone: 'UTC' })
 }
 
 function capitalize(s: string) { return s.charAt(0).toUpperCase() + s.slice(1) }
@@ -133,18 +145,26 @@ function formatDayTitle(date: Date, locale: string) {
   })
 }
 
-/** "5 – 11 August 2026", collapsing the month when the week doesn't straddle one. */
+/** "5 – 11 Aug 2026", collapsing the month when the week doesn't straddle one. */
 function formatWeekRange(start: Date, locale: string) {
   const end = addDays(start, 6)
   const sameMonth = start.getUTCMonth() === end.getUTCMonth()
   const startLabel = start.toLocaleDateString(
     locale,
-    sameMonth ? { day: 'numeric', timeZone: 'UTC' } : { day: 'numeric', month: 'short', timeZone: 'UTC' },
+    sameMonth
+      ? { day: 'numeric', timeZone: 'UTC' }
+      : { day: 'numeric', month: 'short', timeZone: 'UTC' },
   )
   const endLabel = end.toLocaleDateString(locale, {
     day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
   })
   return `${startLabel} – ${endLabel}`
+}
+
+/** "09:30" → 9.5 */
+function timeToHours(t: string) {
+  const [h, m] = t.split(':').map(Number)
+  return h + (m || 0) / 60
 }
 
 const DEFAULT_SCHEDULE: Record<number, WorkDayStatus> = {
@@ -176,8 +196,7 @@ const STATUS_BG_DIM: Record<WorkDayStatus, string> = {
   VACATION:   'bg-emerald-500/8',
 }
 
-// Year view — solid dots, one per day
-const STATUS_DOT: Record<WorkDayStatus, string> = {
+const STATUS_SOLID: Record<WorkDayStatus, string> = {
   WORKING:    'bg-blue-500',
   WEEKEND:    'bg-amber-400',
   SICK_LEAVE: 'bg-rose-500',
@@ -185,10 +204,10 @@ const STATUS_DOT: Record<WorkDayStatus, string> = {
 }
 
 const STATUS_DOT_DIM: Record<WorkDayStatus, string> = {
-  WORKING:    'bg-blue-500/25',
-  WEEKEND:    'bg-amber-400/30',
-  SICK_LEAVE: 'bg-rose-500/25',
-  VACATION:   'bg-emerald-500/25',
+  WORKING:    'bg-blue-500/30',
+  WEEKEND:    'bg-amber-400/35',
+  SICK_LEAVE: 'bg-rose-500/30',
+  VACATION:   'bg-emerald-500/30',
 }
 
 const STATUS_BADGE: Record<WorkDayStatus, string> = {
@@ -210,7 +229,7 @@ interface DayMaps {
   tasksByDay: Map<string, CompletedTask[]>
 }
 
-/** Merge any number of month/year payloads into day-keyed lookups. */
+/** Merge any number of range payloads into day-keyed lookups. */
 function buildDayMaps(datasets: (MonthData | undefined)[]): DayMaps {
   const workDayMap = new Map<string, WorkDay>()
   const tasksByDay = new Map<string, CompletedTask[]>()
@@ -398,11 +417,17 @@ function DayModal({ open, onClose, date, workDay, tasksOnDay, defaults }: DayMod
 //
 //   0 ── year ──── 1 ── month ──── 2 ── week
 //
-// Fractional values are mid-gesture. Each level renders at scale 1 / opacity 1
-// when `zoom` sits exactly on it, and grows + fades as `zoom` moves past it.
-// Because neighbouring levels meet at the same scale halfway between them, the
-// crossfade reads as a single surface being magnified rather than two views
-// swapping — the trick iOS uses in Photos and Calendar.
+// Fractional values are mid-gesture. Each level sits at scale 1 / opacity 1 when
+// `zoom` lands on it and fades as `zoom` moves away. Neighbouring levels meet at
+// the same scale halfway between them, so the crossfade reads as one surface
+// being magnified rather than two views swapping.
+//
+// The zoom value deliberately lives OUTSIDE React state. Re-rendering three
+// calendar grids (the year view alone is 365 nodes) on every animation frame
+// drops frames; instead each frame writes transform/opacity straight to the
+// layer elements, and snapping hands off to a CSS transition that the compositor
+// runs on its own. React state only tracks the settled level, which changes at
+// most once per gesture.
 
 const YEAR = 0
 const MONTH = 1
@@ -411,54 +436,64 @@ const LEVELS = [YEAR, MONTH, WEEK] as const
 
 type Level = typeof LEVELS[number]
 
-/** How much a layer grows per level of zoom past it. */
-const SCALE_SPREAD = 0.45
-/** Resistance applied past the first/last level, so the ends feel elastic. */
+/** Subtle — the fade should carry the transition, not the scaling. */
+const SCALE_SPREAD = 0.16
+/** Resistance past the first/last level, so the ends feel elastic. */
 const RUBBER = 0.25
 /** Trackpad pinch travel → zoom levels. */
 const WHEEL_SENSITIVITY = 0.012
 /** Settle delay after the last wheel event (wheel pinch has no "end" event). */
-const WHEEL_SETTLE_MS = 130
-const SNAP_MS = 340
+const WHEEL_SETTLE_MS = 120
+/** Long, soft ease-out — the shape iOS uses for view transitions. */
+const SNAP_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
+const SNAP_MS = 460
+const LAYER_TRANSITION =
+  `opacity ${SNAP_MS}ms ${SNAP_EASE}, transform ${SNAP_MS}ms ${SNAP_EASE}`
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
-const easeOutCubic = (p: number) => 1 - Math.pow(1 - p, 3)
-/** Ease the crossfade so both layers stay legible through the midpoint. */
+/** s(x) + s(1-x) === 1, so the two active layers always sum to full opacity. */
 const smoothstep = (p: number) => p * p * (3 - 2 * p)
 
-function useZoom(initial: number) {
-  const [zoom, setZoomState] = useState(initial)
-  const zoomRef = useRef(initial)
-  const rafRef = useRef<number | null>(null)
+function useZoomLayers(initial: Level) {
+  const zoomRef = useRef<number>(initial)
+  const layerRefs = useRef<Array<HTMLDivElement | null>>([])
+  const [level, setLevel] = useState<Level>(initial)
 
-  const set = useCallback((z: number) => {
+  /** Write the zoom straight to the DOM — no React render involved. */
+  const paint = useCallback((z: number, animate: boolean) => {
     zoomRef.current = z
-    setZoomState(z)
-  }, [])
 
-  const stop = useCallback(() => {
-    if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
-    rafRef.current = null
-  }, [])
+    for (const lvl of LEVELS) {
+      const el = layerRefs.current[lvl]
+      if (!el) continue
 
-  const animateTo = useCallback((target: number, duration = SNAP_MS) => {
-    stop()
-    const from = zoomRef.current
-    const delta = target - from
-    if (Math.abs(delta) < 0.0005) { set(target); return }
+      const d = z - lvl
+      const dist = Math.abs(d)
+      const visible = dist < 1
 
-    const t0 = performance.now()
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - t0) / duration)
-      set(from + delta * easeOutCubic(p))
-      rafRef.current = p < 1 ? requestAnimationFrame(tick) : null
+      el.style.transition = animate ? LAYER_TRANSITION : 'none'
+      el.style.transform = `scale(${(1 + d * SCALE_SPREAD).toFixed(4)})`
+      el.style.opacity = visible ? smoothstep(1 - dist).toFixed(4) : '0'
+      // visibility (not display) keeps the layer out of the tab order and off
+      // the paint list without forcing a re-layout when it comes back.
+      el.style.visibility = visible ? 'visible' : 'hidden'
+      // Only the front-most layer is interactive, so a half-faded view can
+      // never swallow a click.
+      el.style.pointerEvents = dist < 0.5 ? 'auto' : 'none'
     }
-    rafRef.current = requestAnimationFrame(tick)
-  }, [set, stop])
+  }, [])
 
-  useEffect(() => stop, [stop])
+  /** Ease to the nearest level and let CSS run the animation. */
+  const snap = useCallback((from?: number) => {
+    const target = clamp(Math.round(from ?? zoomRef.current), YEAR, WEEK) as Level
+    paint(target, true)
+    setLevel(target)
+  }, [paint])
 
-  return { zoom, zoomRef, set, stop, animateTo }
+  // Position the layers before first paint, so nothing flashes stacked.
+  useLayoutEffect(() => { paint(zoomRef.current, false) }, [paint])
+
+  return { zoomRef, layerRefs, level, paint, snap }
 }
 
 /**
@@ -469,9 +504,9 @@ function useZoom(initial: number) {
  */
 function usePinchZoom(
   ref: React.RefObject<HTMLElement | null>,
-  zoom: ReturnType<typeof useZoom>,
+  ctl: ReturnType<typeof useZoomLayers>,
 ) {
-  const { zoomRef, set, stop, animateTo } = zoom
+  const { zoomRef, paint, snap } = ctl
 
   useEffect(() => {
     const el = ref.current
@@ -488,45 +523,41 @@ function usePinchZoom(
       return z
     }
 
-    const snap = () => animateTo(clamp(Math.round(zoomRef.current), YEAR, WEEK))
-
     const settleSoon = () => {
       if (settleTimer) clearTimeout(settleTimer)
-      settleTimer = setTimeout(snap, WHEEL_SETTLE_MS)
+      settleTimer = setTimeout(() => snap(), WHEEL_SETTLE_MS)
     }
 
     // ── trackpad pinch (Chrome/Edge/Firefox) ────────────────────────────────
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return          // plain scroll — leave it alone
       e.preventDefault()
-      stop()
-      set(withRubber(zoomRef.current - e.deltaY * WHEEL_SENSITIVITY))
+      paint(withRubber(zoomRef.current - e.deltaY * WHEEL_SENSITIVITY), false)
       settleSoon()
     }
 
     // ── trackpad pinch (Safari) ─────────────────────────────────────────────
     const onGestureStart = (e: Event) => {
       e.preventDefault()
-      stop()
       gestureStartZoom = zoomRef.current
     }
     const onGestureChange = (e: Event) => {
       e.preventDefault()
       const scale = (e as Event & { scale: number }).scale
       if (!scale) return
-      set(withRubber(gestureStartZoom + Math.log2(scale)))
+      paint(withRubber(gestureStartZoom + Math.log2(scale)), false)
     }
     const onGestureEnd = (e: Event) => { e.preventDefault(); snap() }
 
     // ── touch pinch ─────────────────────────────────────────────────────────
-    const distance = (touches: TouchList) => {
-      const [a, b] = [touches[0], touches[1]]
-      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
-    }
+    const distance = (touches: TouchList) =>
+      Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY,
+      )
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 2) return
-      stop()
       pinchStartDist = distance(e.touches)
       gestureStartZoom = zoomRef.current
     }
@@ -534,7 +565,7 @@ function usePinchZoom(
       if (e.touches.length !== 2 || !pinchStartDist) return
       e.preventDefault()
       // Doubling the finger spread advances exactly one level.
-      set(withRubber(gestureStartZoom + Math.log2(distance(e.touches) / pinchStartDist)))
+      paint(withRubber(gestureStartZoom + Math.log2(distance(e.touches) / pinchStartDist)), false)
     }
     const onTouchEnd = () => {
       if (!pinchStartDist) return
@@ -542,8 +573,8 @@ function usePinchZoom(
       snap()
     }
 
-    // passive:false — all of these need preventDefault to stop the browser
-    // zooming the page instead of our calendar.
+    // passive:false — these need preventDefault to stop the browser zooming the
+    // page instead of our calendar.
     el.addEventListener('wheel', onWheel, { passive: false })
     el.addEventListener('gesturestart', onGestureStart as EventListener)
     el.addEventListener('gesturechange', onGestureChange as EventListener)
@@ -564,10 +595,10 @@ function usePinchZoom(
       el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [ref, zoomRef, set, stop, animateTo])
+  }, [ref, zoomRef, paint, snap])
 }
 
-// ── Year view ─────────────────────────────────────────────────────────────────
+// ── Shared view props ─────────────────────────────────────────────────────────
 
 interface ViewProps {
   maps: DayMaps
@@ -577,43 +608,73 @@ interface ViewProps {
   onSelectDay: (d: Date) => void
 }
 
+/** Resolve a day's status and whether it is confirmed or merely inferred. */
+function resolveDay(date: Date, maps: DayMaps, defaults: Record<number, WorkDayStatus>) {
+  const key = toKey(date.toISOString())
+  const workDay = maps.workDayMap.get(key)
+  return {
+    key,
+    workDay,
+    tasks: maps.tasksByDay.get(key) ?? [],
+    status: workDay?.status ?? defaults[dowIndex(date)],
+    confirmed: Boolean(workDay),
+  }
+}
+
+// ── Year view ─────────────────────────────────────────────────────────────────
+
+// Fixed track width: `grid-cols-7` would stretch each dot column to 1fr, and in
+// a wide month cell that scatters the dots into sparse vertical stripes.
+const DOT = 6      // px
+const DOT_GAP = 4  // px
+const DOT_GRID_W = DOT * 7 + DOT_GAP * 6
+
 function YearView({
   year, maps, defaults, todayKey, locale, onPickMonth,
 }: Omit<ViewProps, 'onSelectDay'> & { year: number; onPickMonth: (month: number) => void }) {
   return (
-    <div className="grid h-full grid-cols-2 gap-x-4 gap-y-3 overflow-y-auto sm:grid-cols-3 lg:grid-cols-4">
+    // A fixed 3/4/6-column grid rather than flex-wrap: wrapping leaves an
+    // orphan month on the last row and pins everything to the top.
+    <div className="grid h-full grid-cols-3 place-content-center justify-items-center gap-x-4 gap-y-5 overflow-y-auto py-2 sm:grid-cols-4 xl:grid-cols-6">
       {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
-        const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+        const total = daysInMonthOf(year, month)
         const startDow = dowIndex(utcDay(year, month, 1))
 
         return (
           <button
             key={month}
             onClick={() => onPickMonth(month)}
-            className="flex flex-col rounded-lg p-2 text-left transition-colors hover:bg-muted/60"
+            className="group flex shrink-0 flex-col items-start rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted/50"
           >
             <span className="mb-1.5 text-[11px] font-semibold capitalize text-primary">
               {formatMonthShort(year, month, locale)}
             </span>
-            <div className="grid grid-cols-7 gap-0.75">
+            <div
+              className="grid"
+              style={{
+                gridTemplateColumns: `repeat(7, ${DOT}px)`,
+                gap: `${DOT_GAP}px`,
+                width: DOT_GRID_W,
+              }}
+            >
               {Array.from({ length: startDow }).map((_, i) => (
-                <span key={`pad-${i}`} className="size-1.5" />
+                <span key={`pad-${i}`} style={{ width: DOT, height: DOT }} />
               ))}
-              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+              {Array.from({ length: total }, (_, i) => i + 1).map((day) => {
                 const date = utcDay(year, month, day)
-                const key = toKey(date.toISOString())
-                const wd = maps.workDayMap.get(key)
-                const status = wd?.status ?? defaults[dowIndex(date)]
-                const dot = wd ? STATUS_DOT[status] : STATUS_DOT_DIM[status]
+                const { key, status, confirmed } = resolveDay(date, maps, defaults)
+                const isToday = key === todayKey
 
                 return (
                   <span
                     key={key}
+                    style={{ width: DOT, height: DOT }}
                     className={[
-                      'size-1.5 rounded-full',
-                      dot,
-                      key === todayKey ? 'ring-2 ring-primary ring-offset-1' : '',
-                    ].filter(Boolean).join(' ')}
+                      'rounded-full',
+                      isToday
+                        ? 'bg-primary outline-2 outline-offset-1 outline-primary/40'
+                        : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
+                    ].join(' ')}
                   />
                 )
               })}
@@ -630,16 +691,16 @@ function YearView({
 function MonthView({
   year, month, maps, defaults, todayKey, locale, onSelectDay,
 }: ViewProps & { year: number; month: number }) {
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const total = daysInMonthOf(year, month)
   const startDow = dowIndex(utcDay(year, month, 1))
-  const numRows = Math.ceil((startDow + daysInMonth) / 7)
+  const numRows = Math.ceil((startDow + total) / 7)
 
-  const DOW_LABELS = Array.from({ length: 7 }, (_, i) => getDowLabel(i, locale, 'short'))
+  const dowLabels = Array.from({ length: 7 }, (_, i) => getDowLabel(i, locale, 'short'))
 
   return (
     <div className="flex h-full flex-col">
       <div className="grid shrink-0 grid-cols-7">
-        {DOW_LABELS.map((d) => (
+        {dowLabels.map((d) => (
           <div key={d} className="py-1 text-center text-[11px] font-medium capitalize text-muted-foreground">
             {d}
           </div>
@@ -647,44 +708,40 @@ function MonthView({
       </div>
 
       <div
-        className="grid min-h-0 flex-1 grid-cols-7 gap-0.5"
-        style={{ gridTemplateRows: `repeat(${numRows}, 1fr)` }}
+        className="grid min-h-0 flex-1 grid-cols-7 gap-1"
+        style={{ gridTemplateRows: `repeat(${numRows}, minmax(0, 1fr))` }}
       >
         {Array.from({ length: startDow }).map((_, i) => (
-          <div key={`pad-${i}`} className="rounded-md" />
+          <div key={`pad-${i}`} />
         ))}
 
-        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+        {Array.from({ length: total }, (_, i) => i + 1).map((day) => {
           const date = utcDay(year, month, day)
-          const key = toKey(date.toISOString())
-          const wd = maps.workDayMap.get(key)
-          const tasks = maps.tasksByDay.get(key) ?? []
+          const { key, workDay, tasks, status, confirmed } = resolveDay(date, maps, defaults)
           const isToday = key === todayKey
-          const status = wd?.status ?? defaults[dowIndex(date)]
-          const bgClass = wd ? STATUS_BG[status] : STATUS_BG_DIM[status]
 
           return (
             <button
               key={key}
               onClick={() => onSelectDay(date)}
               className={[
-                'flex flex-col items-center justify-center gap-1.5 rounded-md text-xs transition-colors hover:brightness-95',
-                bgClass,
-                isToday ? 'ring-2 ring-primary ring-offset-1' : '',
-              ].filter(Boolean).join(' ')}
+                'flex flex-col items-center justify-center gap-1 rounded-lg text-xs transition-colors',
+                confirmed ? STATUS_BG[status] : STATUS_BG_DIM[status],
+                isToday ? 'ring-1 ring-primary' : 'hover:ring-1 hover:ring-border',
+              ].join(' ')}
             >
               <span className={`text-base font-semibold leading-none ${isToday ? 'text-primary' : ''}`}>
                 {day}
               </span>
-              {wd?.startTime && wd?.endTime && (
+              {workDay?.startTime && workDay?.endTime && (
                 <span className="text-[10px] leading-none opacity-60">
-                  {wd.startTime.slice(0, 5)}–{wd.endTime.slice(0, 5)}
+                  {workDay.startTime.slice(0, 5)}–{workDay.endTime.slice(0, 5)}
                 </span>
               )}
               {tasks.length > 0 && (
                 <div className="flex gap-0.5">
-                  {tasks.slice(0, 3).map((_, ti) => (
-                    <div key={ti} className="size-1.5 rounded-full bg-emerald-500" />
+                  {tasks.slice(0, 3).map((task) => (
+                    <div key={task.id} className="size-1.5 rounded-full bg-emerald-500" />
                   ))}
                 </div>
               )}
@@ -697,111 +754,214 @@ function MonthView({
 }
 
 // ── Week view ─────────────────────────────────────────────────────────────────
+//
+// A time grid, not seven tall empty cards: hour rows down the left, the working
+// window drawn as a block in each day column. This is what gives the zoomed-in
+// level something to actually show.
+
+const HOUR_ROW_H = 46          // px per hour
+const GUTTER = '3.25rem'
+const DAY_START_FALLBACK = 8
+const DAY_END_FALLBACK = 19
 
 function WeekView({
   weekStart, maps, defaults, todayKey, locale, onSelectDay,
 }: ViewProps & { weekStart: Date }) {
+  const { t } = useTranslation()
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const resolved = days.map((d) => ({ date: d, ...resolveDay(d, maps, defaults) }))
+
+  // Widen the visible hour range to cover whatever the week actually contains.
+  let from = DAY_START_FALLBACK
+  let to = DAY_END_FALLBACK
+  for (const r of resolved) {
+    if (r.workDay?.startTime) from = Math.min(from, Math.floor(timeToHours(r.workDay.startTime)))
+    if (r.workDay?.endTime)   to   = Math.max(to,   Math.ceil(timeToHours(r.workDay.endTime)))
+  }
+  from = clamp(from, 0, 23)
+  to = clamp(Math.max(to, from + 1), 1, 24)
+
+  const hours = Array.from({ length: to - from }, (_, i) => from + i)
+  const gridTemplateColumns = `${GUTTER} repeat(7, minmax(0, 1fr))`
 
   return (
-    <div className="grid h-full grid-cols-7 gap-1.5">
-      {days.map((date) => {
-        const key = toKey(date.toISOString())
-        const wd = maps.workDayMap.get(key)
-        const tasks = maps.tasksByDay.get(key) ?? []
-        const isToday = key === todayKey
-        const status = wd?.status ?? defaults[dowIndex(date)]
-        const bgClass = wd ? STATUS_BG[status] : STATUS_BG_DIM[status]
-
-        return (
-          <button
-            key={key}
-            onClick={() => onSelectDay(date)}
-            className={[
-              'flex min-h-0 flex-col items-stretch gap-2 rounded-xl p-2 text-left transition-colors hover:brightness-95',
-              bgClass,
-              isToday ? 'ring-2 ring-primary ring-offset-1' : '',
-            ].filter(Boolean).join(' ')}
-          >
-            <div className="shrink-0 text-center">
-              <div className="text-[11px] font-medium capitalize text-muted-foreground">
+    <div className="flex h-full flex-col">
+      {/* Day headers — pinned above the scrolling time grid */}
+      <div className="grid shrink-0 pb-1.5" style={{ gridTemplateColumns }}>
+        <div />
+        {resolved.map(({ date, key, status, confirmed }) => {
+          const isToday = key === todayKey
+          return (
+            <button
+              key={key}
+              onClick={() => onSelectDay(date)}
+              className="mx-0.5 flex flex-col items-center rounded-lg py-1 transition-colors hover:bg-muted/50"
+            >
+              <span className="text-[11px] font-medium capitalize text-muted-foreground">
                 {getDowLabel(dowIndex(date), locale, 'short')}
-              </div>
-              <div className={`text-2xl font-semibold leading-tight ${isToday ? 'text-primary' : ''}`}>
+              </span>
+              <span
+                className={[
+                  'mt-0.5 flex size-7 items-center justify-center rounded-full text-sm font-semibold',
+                  isToday ? 'bg-primary text-primary-foreground' : '',
+                ].join(' ')}
+              >
                 {date.getUTCDate()}
-              </div>
-              {wd?.startTime && wd?.endTime && (
-                <div className="text-[11px] leading-none opacity-70">
-                  {wd.startTime.slice(0, 5)}–{wd.endTime.slice(0, 5)}
-                </div>
-              )}
-            </div>
+              </span>
+              {/* status pip, so non-working days still read at a glance */}
+              <span
+                className={[
+                  'mt-1 h-1 w-4 rounded-full',
+                  confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
+                ].join(' ')}
+              />
+            </button>
+          )
+        })}
+      </div>
 
-            {/* Zoomed in this far there is room for the actual task titles. */}
-            {tasks.length > 0 && (
-              <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-                {tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="rounded-md bg-background/70 px-1.5 py-1 text-[11px] leading-tight"
-                  >
-                    <span className="line-clamp-2">{task.title}</span>
-                  </div>
+      {/* pt-2 keeps the first hour label from clipping — it sits on the rule,
+          vertically centred, so half of it hangs above the grid. */}
+      <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+        <div
+          className="relative grid"
+          style={{ gridTemplateColumns, height: hours.length * HOUR_ROW_H }}
+        >
+          {/* Hour labels */}
+          <div className="relative">
+            {hours.map((h, i) => (
+              <span
+                key={h}
+                className="absolute right-2 -translate-y-1/2 text-[10px] tabular-nums text-muted-foreground"
+                style={{ top: i * HOUR_ROW_H }}
+              >
+                {String(h).padStart(2, '0')}:00
+              </span>
+            ))}
+          </div>
+
+          {/* Day columns */}
+          {resolved.map(({ date, key, workDay, tasks, status, confirmed }) => {
+            const isToday = key === todayKey
+            const start = workDay?.startTime ? timeToHours(workDay.startTime) : null
+            const end = workDay?.endTime ? timeToHours(workDay.endTime) : null
+            const hasBlock = start != null && end != null && end > start
+
+            return (
+              <button
+                key={key}
+                onClick={() => onSelectDay(date)}
+                className={[
+                  'relative mx-0.5 rounded-lg border-l border-border/40 text-left transition-colors',
+                  // Tint every column, confirmed or merely inferred, so a
+                  // weekend still reads as a weekend in the time grid.
+                  STATUS_BG_DIM[status],
+                  isToday ? 'ring-1 ring-primary/30' : '',
+                ].join(' ')}
+              >
+                {/* Hour rules */}
+                {hours.map((h, i) => (
+                  <span
+                    key={h}
+                    className="absolute inset-x-0 border-t border-border/25"
+                    style={{ top: i * HOUR_ROW_H }}
+                  />
                 ))}
-              </div>
-            )}
-          </button>
-        )
-      })}
+
+                {/* Working window */}
+                {hasBlock && (
+                  <div
+                    className={[
+                      'absolute inset-x-1 flex flex-col gap-1 overflow-hidden rounded-lg p-1.5',
+                      STATUS_BG[status],
+                    ].join(' ')}
+                    style={{
+                      top: (start! - from) * HOUR_ROW_H,
+                      height: Math.max(22, (end! - start!) * HOUR_ROW_H),
+                    }}
+                  >
+                    <span className="shrink-0 text-[10px] font-medium tabular-nums opacity-70">
+                      {workDay!.startTime!.slice(0, 5)}–{workDay!.endTime!.slice(0, 5)}
+                    </span>
+                    {tasks.map((task) => (
+                      <span
+                        key={task.id}
+                        className="line-clamp-2 shrink-0 rounded bg-background/60 px-1.5 py-0.5 text-[10px] leading-tight"
+                      >
+                        {task.title}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* No working window — surface the status and any tasks instead */}
+                {!hasBlock && (
+                  <div className="absolute inset-x-1 top-1 flex flex-col gap-1">
+                    {confirmed && (
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE[status]}`}>
+                        {t(`me.status${status === 'SICK_LEAVE' ? 'SickLeave' : capitalize(status.toLowerCase())}`)}
+                      </span>
+                    )}
+                    {tasks.map((task) => (
+                      <span
+                        key={task.id}
+                        className="line-clamp-2 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] leading-tight"
+                      >
+                        {task.title}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
 
 // ── Zoomable calendar ─────────────────────────────────────────────────────────
 
-function ZoomCalendar({ userId }: { userId: number }) {
+function ZoomCalendar({
+  userId, anchor, setAnchor,
+}: {
+  userId: number
+  anchor: Date
+  setAnchor: React.Dispatch<React.SetStateAction<Date>>
+}) {
   const { t, i18n } = useTranslation()
   const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-US'
 
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const zoomCtl = useZoom(MONTH)
-  const { zoom, animateTo } = zoomCtl
-  usePinchZoom(containerRef, zoomCtl)
+  const ctl = useZoomLayers(MONTH)
+  const { layerRefs, level, snap } = ctl
+  usePinchZoom(containerRef, ctl)
 
-  // The day the calendar is centred on; every view derives its range from it.
-  const [anchor, setAnchor] = useState(() => {
-    const now = new Date()
-    return utcDay(now.getFullYear(), now.getMonth() + 1, now.getDate())
-  })
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
 
-  const level = clamp(Math.round(zoom), YEAR, WEEK) as Level
   const year = anchor.getUTCFullYear()
   const month = anchor.getUTCMonth() + 1
   const weekStart = startOfWeek(anchor)
   const weekEnd = addDays(weekStart, 6)
+  const weekEndYear = weekEnd.getUTCFullYear()
 
-  // Only fetch what is on screen (or being zoomed toward).
-  const monthQ = useMonthData(year, month)
-  const yearQ  = useYearData(year, zoom < MONTH)
-  // A week can straddle two months; when it doesn't, both keys collapse to one
-  // query and React Query dedupes them.
-  const weekAQ = useMonthData(weekStart.getUTCFullYear(), weekStart.getUTCMonth() + 1, zoom > MONTH)
-  const weekBQ = useMonthData(weekEnd.getUTCFullYear(), weekEnd.getUTCMonth() + 1, zoom > MONTH)
+  // One request covers every day of the year, so all three views share it.
+  // A week straddling New Year needs the neighbour too — that's the only case
+  // where a second request happens.
+  const yearQ = useYearData(year)
+  const nextYearQ = useYearData(weekEndYear, weekEndYear !== year)
 
   // localStorage + JSON.parse per day would be ~365 reads in the year view.
   const defaults = useMemo(() => getWeeklyDefaults(userId), [userId])
-
-  const monthMaps = useMemo(() => buildDayMaps([monthQ.data]), [monthQ.data])
-  const yearMaps  = useMemo(() => buildDayMaps([yearQ.data]), [yearQ.data])
-  const weekMaps  = useMemo(
-    () => buildDayMaps([weekAQ.data, weekBQ.data]),
-    [weekAQ.data, weekBQ.data],
+  const maps = useMemo(
+    () => buildDayMaps([yearQ.data, nextYearQ.data]),
+    [yearQ.data, nextYearQ.data],
   )
 
-  const todayKey = toKey(new Date().toISOString())
+  const todayKey = toKey(todayUTC().toISOString())
 
-  // Prev/next step by whatever unit is currently in focus.
+  // Prev/next steps by whatever unit is currently in focus.
   const step = (dir: 1 | -1) => {
     setAnchor((prev) => {
       if (level === YEAR)  return utcDay(prev.getUTCFullYear() + dir, prev.getUTCMonth() + 1, 1)
@@ -825,13 +985,14 @@ function ZoomCalendar({ userId }: { userId: number }) {
   // Tapping a month in the year view zooms into it, iOS-style.
   const pickMonth = (m: number) => {
     setAnchor(utcDay(year, m, 1))
-    animateTo(MONTH)
+    snap(MONTH)
   }
 
   const selKey     = selectedDate ? toKey(selectedDate.toISOString()) : null
-  const activeMaps = level === YEAR ? yearMaps : level === WEEK ? weekMaps : monthMaps
-  const selWorkDay = selKey ? activeMaps.workDayMap.get(selKey) : undefined
-  const selTasks   = selKey ? (activeMaps.tasksByDay.get(selKey) ?? []) : []
+  const selWorkDay = selKey ? maps.workDayMap.get(selKey) : undefined
+  const selTasks   = selKey ? (maps.tasksByDay.get(selKey) ?? []) : []
+
+  const viewProps = { maps, defaults, todayKey, locale, onSelectDay: setSelectedDate }
 
   return (
     <>
@@ -841,12 +1002,12 @@ function ZoomCalendar({ userId }: { userId: number }) {
             <CardTitle className="text-sm font-medium">{t('me.schedule')}</CardTitle>
 
             <div className="flex items-center gap-2">
-              {/* Explicit control — pinch is invisible, and this is keyboard-reachable */}
+              {/* Explicit control — pinch is invisible and not keyboard-reachable */}
               <div className="flex rounded-lg bg-muted p-0.5">
                 {zoomLabels.map((z) => (
                   <button
                     key={z.level}
-                    onClick={() => animateTo(z.level)}
+                    onClick={() => snap(z.level)}
                     aria-pressed={level === z.level}
                     className={[
                       'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
@@ -876,72 +1037,47 @@ function ZoomCalendar({ userId }: { userId: number }) {
         <CardContent className="flex min-h-0 flex-1 flex-col pb-4">
           {/*
             touch-none keeps the browser from pinch-zooming the page out from
-            under us; the layers below are stacked and cross-faded by `zoom`.
+            under us. All three layers stay mounted and are cross-faded by
+            `paint()` writing styles directly — React never re-renders them
+            mid-gesture, which is what keeps the transition at frame rate.
           */}
           <div ref={containerRef} className="relative min-h-0 flex-1 touch-none overflow-hidden">
-            {LEVELS.map((lvl) => {
-              const d = zoom - lvl
-              if (Math.abs(d) >= 1) return null   // fully faded out — don't render
-
-              const opacity = smoothstep(1 - Math.abs(d))
-              const scale = 1 + d * SCALE_SPREAD
-              const isFront = Math.abs(d) < 0.5
-
-              return (
-                <div
-                  key={lvl}
-                  aria-hidden={!isFront}
-                  className="absolute inset-0"
-                  style={{
-                    opacity,
-                    transform: `scale(${scale})`,
-                    transformOrigin: 'center center',
-                    // Only the front-most layer is interactive, so a half-faded
-                    // view can never swallow a click.
-                    pointerEvents: isFront ? 'auto' : 'none',
-                    willChange: 'transform, opacity',
-                  }}
-                >
-                  {lvl === YEAR && (
-                    <YearView
-                      year={year} maps={yearMaps} defaults={defaults}
-                      todayKey={todayKey} locale={locale} onPickMonth={pickMonth}
-                    />
-                  )}
-                  {lvl === MONTH && (
-                    <MonthView
-                      year={year} month={month} maps={monthMaps} defaults={defaults}
-                      todayKey={todayKey} locale={locale} onSelectDay={setSelectedDate}
-                    />
-                  )}
-                  {lvl === WEEK && (
-                    <WeekView
-                      weekStart={weekStart} maps={weekMaps} defaults={defaults}
-                      todayKey={todayKey} locale={locale} onSelectDay={setSelectedDate}
-                    />
-                  )}
-                </div>
-              )
-            })}
+            {LEVELS.map((lvl) => (
+              <div
+                key={lvl}
+                ref={(el) => { layerRefs.current[lvl] = el }}
+                aria-hidden={level !== lvl}
+                className="absolute inset-0 origin-center will-change-[transform,opacity]"
+              >
+                {lvl === YEAR && (
+                  <YearView
+                    year={year} maps={maps} defaults={defaults}
+                    todayKey={todayKey} locale={locale} onPickMonth={pickMonth}
+                  />
+                )}
+                {lvl === MONTH && (
+                  <MonthView year={year} month={month} {...viewProps} />
+                )}
+                {lvl === WEEK && (
+                  <WeekView weekStart={weekStart} {...viewProps} />
+                )}
+              </div>
+            ))}
           </div>
 
           {/* Legend */}
-          <div className="mt-3 flex shrink-0 flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3">
+          <div className="mt-3 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3">
             {([
-              ['bg-blue-500/20',    t('me.statusWorking')],
-              ['bg-amber-400/25',   t('me.statusWeekend')],
-              ['bg-rose-500/20',    t('me.statusSickLeave')],
-              ['bg-emerald-500/20', t('me.statusVacation')],
+              ['bg-blue-500',    t('me.statusWorking')],
+              ['bg-amber-400',   t('me.statusWeekend')],
+              ['bg-rose-500',    t('me.statusSickLeave')],
+              ['bg-emerald-500', t('me.statusVacation')],
             ] as [string, string][]).map(([cls, label]) => (
               <span key={label} className="flex items-center gap-1.5">
-                <span className={`inline-block size-2.5 rounded-sm ${cls}`} />
+                <span className={`inline-block size-2 rounded-full ${cls}`} />
                 <span className="text-[11px] text-muted-foreground">{label}</span>
               </span>
             ))}
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
-              <span className="text-[11px] text-muted-foreground">{t('me.completed')}</span>
-            </span>
             <span className="ml-auto hidden text-[11px] text-muted-foreground sm:inline">
               {t('schedule.pinchHint')}
             </span>
@@ -979,7 +1115,7 @@ function StatsCards({ stats }: {
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid shrink-0 grid-cols-2 gap-3">
       {cards.map((c) => (
         <Card key={c.label}>
           <CardContent className="pb-4 pt-4">
@@ -995,9 +1131,11 @@ function StatsCards({ stats }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 function SchedulePage() {
-  const now = new Date()
+  // Anchor lives here so the stats cards track the month being viewed.
+  const [anchor, setAnchor] = useState(todayUTC)
+
   const { data: me, isLoading } = useMe()
-  const { data: monthData } = useMonthData(now.getFullYear(), now.getMonth() + 1)
+  const { data: monthData } = useMonthData(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1)
 
   if (isLoading) {
     return (
@@ -1010,7 +1148,7 @@ function SchedulePage() {
   return (
     <main className="flex h-[calc(100vh-56px)] flex-col gap-4 p-6">
       <StatsCards stats={monthData?.stats} />
-      <ZoomCalendar userId={me?.id ?? 0} />
+      <ZoomCalendar userId={me?.id ?? 0} anchor={anchor} setAnchor={setAnchor} />
     </main>
   )
 }
