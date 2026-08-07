@@ -657,8 +657,8 @@ const GUTTER_W = 46
 const HEADER_H = 18
 
 function YearView({
-  year, maps, defaults, todayKey, locale, onPickDay,
-}: Omit<ViewProps, 'onSelectDay'> & { year: number; onPickDay: (d: Date) => void }) {
+  year, maps, defaults, todayKey, locale, onSelectDay,
+}: ViewProps & { year: number }) {
   const [wrapRef, { w, h }] = useElementSize<HTMLDivElement>()
 
   // Whichever axis runs out first sets the dot size; the leftover space on the
@@ -744,7 +744,7 @@ function YearView({
                   return (
                     <button
                       key={key}
-                      onClick={() => onPickDay(date)}
+                      onClick={() => onSelectDay(date)}
                       title={formatDayTitle(date, locale)}
                       style={{ width: dot, height: dot }}
                       className={[
@@ -1067,12 +1067,6 @@ function ZoomCalendar({
     { level: WEEK,  label: t('schedule.week') },
   ]
 
-  // Tapping a dot in the year view zooms to that day's month, iOS-style.
-  const pickDay = (d: Date) => {
-    setAnchor(d)
-    snap(MONTH)
-  }
-
   const selKey     = selectedDate ? toKey(selectedDate.toISOString()) : null
   const selWorkDay = selKey ? maps.workDayMap.get(selKey) : undefined
   const selTasks   = selKey ? (maps.tasksByDay.get(selKey) ?? []) : []
@@ -1135,10 +1129,7 @@ function ZoomCalendar({
                 className="absolute inset-0 origin-center will-change-[transform,opacity]"
               >
                 {lvl === YEAR && (
-                  <YearView
-                    year={year} maps={maps} defaults={defaults}
-                    todayKey={todayKey} locale={locale} onPickDay={pickDay}
-                  />
+                  <YearView year={year} {...viewProps} />
                 )}
                 {lvl === MONTH && (
                   <MonthView year={year} month={month} {...viewProps} />
