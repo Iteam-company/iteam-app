@@ -619,58 +619,97 @@ function resolveDay(date: Date, maps: DayMaps, defaults: Record<number, WorkDayS
 
 // One continuous field of dots for the whole year — no month boxes. Seven
 // weekday rows, one column per week, running straight from Jan 1 to Dec 31.
-const DOT = 12     // px
-const DOT_GAP = 5  // px
+// Dot size and spacing are derived from the measured container so the field
+// spreads across the whole area rather than sitting as a fixed block in the
+// middle of it.
+
+/** Target gap as a fraction of the dot size, before spare space is shared out. */
+const GAP_RATIO = 0.4
+/** Rows would otherwise drift into sparse stripes on a short, wide layer. */
+const MAX_ROW_GAP = 2
 
 function daysInYear(year: number) {
   return (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86_400_000
 }
 
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null)
+  const [size, setSize] = useState({ w: 0, h: 0 })
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      setSize((prev) => (prev.w === width && prev.h === height ? prev : { w: width, h: height }))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  return [ref, size] as const
+}
+
 function YearView({
   year, maps, defaults, todayKey, locale, onPickDay,
 }: Omit<ViewProps, 'onSelectDay'> & { year: number; onPickDay: (d: Date) => void }) {
+  const [wrapRef, { w, h }] = useElementSize<HTMLDivElement>()
+
   const jan1 = utcDay(year, 1, 1)
   const lead = dowIndex(jan1)               // blank cells before Jan 1
   const total = daysInYear(year)
+  const cols = Math.ceil((lead + total) / 7)
+
+  // Whichever axis runs out first sets the dot size; the leftover space on the
+  // other axis is then shared between the gaps.
+  const dot = Math.max(3, Math.floor(Math.min(
+    w / (cols + (cols - 1) * GAP_RATIO),
+    h / (7 + 6 * GAP_RATIO),
+  )))
+  const colGap = Math.max(0, (w - cols * dot) / (cols - 1))
+  const rowGap = Math.max(0, Math.min((h - 7 * dot) / 6, dot * MAX_ROW_GAP))
 
   return (
-    <div className="flex h-full items-center justify-center overflow-auto">
-      <div
-        className="grid"
-        style={{
-          // Filling down each column before moving right makes every column a
-          // calendar week and every row a weekday.
-          gridTemplateRows: `repeat(7, ${DOT}px)`,
-          gridAutoFlow: 'column',
-          gridAutoColumns: `${DOT}px`,
-          gap: `${DOT_GAP}px`,
-        }}
-      >
-        {Array.from({ length: lead }).map((_, i) => (
-          <span key={`pad-${i}`} style={{ width: DOT, height: DOT }} />
-        ))}
+    <div ref={wrapRef} className="flex h-full w-full items-center justify-center overflow-hidden">
+      {w > 0 && (
+        <div
+          className="grid"
+          style={{
+            // Filling down each column before moving right makes every column a
+            // calendar week and every row a weekday.
+            gridTemplateRows: `repeat(7, ${dot}px)`,
+            gridAutoFlow: 'column',
+            gridAutoColumns: `${dot}px`,
+            columnGap: `${colGap}px`,
+            rowGap: `${rowGap}px`,
+          }}
+        >
+          {Array.from({ length: lead }).map((_, i) => (
+            <span key={`pad-${i}`} style={{ width: dot, height: dot }} />
+          ))}
 
-        {Array.from({ length: total }, (_, i) => i).map((offset) => {
-          const date = addDays(jan1, offset)
-          const { key, status, confirmed } = resolveDay(date, maps, defaults)
-          const isToday = key === todayKey
+          {Array.from({ length: total }, (_, i) => i).map((offset) => {
+            const date = addDays(jan1, offset)
+            const { key, status, confirmed } = resolveDay(date, maps, defaults)
+            const isToday = key === todayKey
 
-          return (
-            <button
-              key={key}
-              onClick={() => onPickDay(date)}
-              title={formatDayTitle(date, locale)}
-              style={{ width: DOT, height: DOT }}
-              className={[
-                'rounded-full transition-transform hover:scale-125',
-                isToday
-                  ? 'bg-primary ring-2 ring-primary/40'
-                  : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
-              ].join(' ')}
-            />
-          )
-        })}
-      </div>
+            return (
+              <button
+                key={key}
+                onClick={() => onPickDay(date)}
+                title={formatDayTitle(date, locale)}
+                style={{ width: dot, height: dot }}
+                className={[
+                  'rounded-full transition-transform hover:scale-125',
+                  isToday
+                    ? 'bg-primary ring-2 ring-primary/40'
+                    : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
+                ].join(' ')}
+              />
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
