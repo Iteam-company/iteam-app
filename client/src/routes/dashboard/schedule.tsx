@@ -133,6 +133,12 @@ function formatMonthYear(year: number, month: number, locale: string) {
   return capitalize(name) + ' ' + year
 }
 
+function formatMonthShort(year: number, month: number, locale: string) {
+  return capitalize(
+    utcDay(year, month, 1).toLocaleDateString(locale, { month: 'short', timeZone: 'UTC' }),
+  )
+}
+
 function formatDayTitle(date: Date, locale: string) {
   return date.toLocaleDateString(locale, {
     day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
@@ -626,7 +632,7 @@ function resolveDay(date: Date, maps: DayMaps, defaults: Record<number, WorkDayS
 /** Target gap as a fraction of the dot size, before spare space is shared out. */
 const GAP_RATIO = 0.4
 /** Rows would otherwise drift into sparse stripes on a short, wide layer. */
-const MAX_ROW_GAP = 2
+const MAX_ROW_GAP = 1.3
 
 function daysInYear(year: number) {
   return (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86_400_000
@@ -650,6 +656,10 @@ function useElementSize<T extends HTMLElement>() {
   return [ref, size] as const
 }
 
+/** Left gutter for weekday labels, top strip for month labels. */
+const GUTTER_W = 34
+const HEADER_H = 18
+
 function YearView({
   year, maps, defaults, todayKey, locale, onPickDay,
 }: Omit<ViewProps, 'onSelectDay'> & { year: number; onPickDay: (d: Date) => void }) {
@@ -662,53 +672,104 @@ function YearView({
 
   // Whichever axis runs out first sets the dot size; the leftover space on the
   // other axis is then shared between the gaps.
+  const gridW = Math.max(0, w - GUTTER_W)
+  const gridH = Math.max(0, h - HEADER_H)
   const dot = Math.max(3, Math.floor(Math.min(
-    w / (cols + (cols - 1) * GAP_RATIO),
-    h / (7 + 6 * GAP_RATIO),
+    gridW / (cols + (cols - 1) * GAP_RATIO),
+    gridH / (7 + 6 * GAP_RATIO),
   )))
-  const colGap = Math.max(0, (w - cols * dot) / (cols - 1))
-  const rowGap = Math.max(0, Math.min((h - 7 * dot) / 6, dot * MAX_ROW_GAP))
+  const colGap = Math.max(0, (gridW - cols * dot) / (cols - 1))
+  const rowGap = Math.max(0, Math.min((gridH - 7 * dot) / 6, dot * MAX_ROW_GAP))
+  const colPitch = dot + colGap
+
+  // Where each month begins, in grid columns — labels for the top strip.
+  const monthStarts = Array.from({ length: 12 }, (_, i) => {
+    const first = utcDay(year, i + 1, 1)
+    const offset = Math.round((first.getTime() - jan1.getTime()) / 86_400_000)
+    return { month: i + 1, col: Math.floor((lead + offset) / 7) }
+  })
+
+  const dowLabels = Array.from({ length: 7 }, (_, i) => getDowLabel(i, locale, 'short'))
 
   return (
-    <div ref={wrapRef} className="flex h-full w-full items-center justify-center overflow-hidden">
+    <div ref={wrapRef} className="flex h-full w-full flex-col justify-center overflow-hidden">
       {w > 0 && (
-        <div
-          className="grid"
-          style={{
-            // Filling down each column before moving right makes every column a
-            // calendar week and every row a weekday.
-            gridTemplateRows: `repeat(7, ${dot}px)`,
-            gridAutoFlow: 'column',
-            gridAutoColumns: `${dot}px`,
-            columnGap: `${colGap}px`,
-            rowGap: `${rowGap}px`,
-          }}
-        >
-          {Array.from({ length: lead }).map((_, i) => (
-            <span key={`pad-${i}`} style={{ width: dot, height: dot }} />
-          ))}
+        <>
+          {/* Month labels — an axis across the top, not month boxes */}
+          <div className="flex shrink-0" style={{ height: HEADER_H }}>
+            <div style={{ width: GUTTER_W }} />
+            <div className="relative flex-1">
+              {monthStarts.map(({ month, col }) => (
+                <span
+                  key={month}
+                  className="absolute top-0 text-[10px] font-medium capitalize text-muted-foreground"
+                  style={{ left: col * colPitch }}
+                >
+                  {formatMonthShort(year, month, locale)}
+                </span>
+              ))}
+            </div>
+          </div>
 
-          {Array.from({ length: total }, (_, i) => i).map((offset) => {
-            const date = addDays(jan1, offset)
-            const { key, status, confirmed } = resolveDay(date, maps, defaults)
-            const isToday = key === todayKey
+          <div className="flex">
+            {/* Weekday labels — one per row, so a row can actually be read */}
+            <div
+              className="grid shrink-0"
+              style={{
+                width: GUTTER_W,
+                gridTemplateRows: `repeat(7, ${dot}px)`,
+                rowGap: `${rowGap}px`,
+              }}
+            >
+              {dowLabels.map((label) => (
+                <span
+                  key={label}
+                  className="flex items-center text-[10px] capitalize leading-none text-muted-foreground"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
 
-            return (
-              <button
-                key={key}
-                onClick={() => onPickDay(date)}
-                title={formatDayTitle(date, locale)}
-                style={{ width: dot, height: dot }}
-                className={[
-                  'rounded-full transition-transform hover:scale-125',
-                  isToday
-                    ? 'bg-primary ring-2 ring-primary/40'
-                    : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
-                ].join(' ')}
-              />
-            )
-          })}
-        </div>
+            <div
+              className="grid"
+              style={{
+                // Filling down each column before moving right makes every
+                // column a calendar week and every row a weekday.
+                gridTemplateRows: `repeat(7, ${dot}px)`,
+                gridAutoFlow: 'column',
+                gridAutoColumns: `${dot}px`,
+                columnGap: `${colGap}px`,
+                rowGap: `${rowGap}px`,
+              }}
+            >
+              {Array.from({ length: lead }).map((_, i) => (
+                <span key={`pad-${i}`} style={{ width: dot, height: dot }} />
+              ))}
+
+              {Array.from({ length: total }, (_, i) => i).map((offset) => {
+                const date = addDays(jan1, offset)
+                const { key, status, confirmed } = resolveDay(date, maps, defaults)
+                const isToday = key === todayKey
+
+                return (
+                  <button
+                    key={key}
+                    onClick={() => onPickDay(date)}
+                    title={formatDayTitle(date, locale)}
+                    style={{ width: dot, height: dot }}
+                    className={[
+                      'rounded-full transition-transform hover:scale-125',
+                      isToday
+                        ? 'bg-primary ring-2 ring-primary/40'
+                        : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
+                    ].join(' ')}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        </>
       )}
     </div>
   )
