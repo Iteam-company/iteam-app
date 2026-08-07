@@ -748,7 +748,9 @@ function YearView({
                       title={formatDayTitle(date, locale)}
                       style={{ width: dot, height: dot }}
                       className={[
-                        'rounded-full transition-transform hover:scale-125',
+                        // Percentage radius, so the corner softens in step with
+                        // whatever size the grid resolves the cell to.
+                        'rounded-[22%] transition-transform hover:scale-125',
                         isToday
                           ? 'bg-primary ring-2 ring-primary/40'
                           : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
@@ -1150,7 +1152,7 @@ function ZoomCalendar({
               ['bg-emerald-500', t('me.statusVacation')],
             ] as [string, string][]).map(([cls, label]) => (
               <span key={label} className="flex items-center gap-1.5">
-                <span className={`inline-block size-2 rounded-full ${cls}`} />
+                <span className={`inline-block size-2.5 rounded-[22%] ${cls}`} />
                 <span className="text-[11px] text-muted-foreground">{label}</span>
               </span>
             ))}
