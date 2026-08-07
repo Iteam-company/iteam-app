@@ -13,19 +13,12 @@ const prisma = new PrismaClient({
 
 const DEFAULT_ROLES = [
   'CEO / Директор',
-  'Операційний директор',
-  'Розробник',
-  'Дизайнер',
-  'HR-спеціаліст',
-  'Маркетолог',
-  'Менеджер з продажів',
-  'Фінансовий аналітик',
 ];
 
 async function main() {
   console.log('🌱 Seeding database…');
 
-  // ── Company ────────────────────────────────────────────────────────────────
+  // #Company
 
   const company = await prisma.company.upsert({
     where: { id: 1 },
@@ -43,7 +36,7 @@ async function main() {
 
   console.log(`  ✔ Company  "${company.title}" (id=${company.id})`);
 
-  // ── Roles ──────────────────────────────────────────────────────────────────
+  // #Roles
 
   for (const name of DEFAULT_ROLES) {
     await prisma.companyRole.upsert({
@@ -55,7 +48,7 @@ async function main() {
 
   console.log(`  ✔ Roles    ${DEFAULT_ROLES.length} default roles`);
 
-  // ── Users ──────────────────────────────────────────────────────────────────
+  // #Users
 
   const SEEDS = [
     {
@@ -65,62 +58,6 @@ async function main() {
       role: Role.ADMIN,
       occupation: 'CEO / Директор',
       phone: '+380991234567',
-    },
-    {
-      email: 'user@gmail.com',
-      password: 'User1234!',
-      fullName: 'Default User',
-      role: Role.USER,
-      occupation: 'Розробник',
-      phone: '+380997654321',
-    },
-    {
-      email: 'olena.kovalenko@iteam.ua',
-      password: 'User1234!',
-      fullName: 'Олена Коваленко',
-      role: Role.USER,
-      occupation: 'HR-спеціаліст',
-      phone: '+380931112233',
-    },
-    {
-      email: 'mykola.bondar@iteam.ua',
-      password: 'User1234!',
-      fullName: 'Микола Бондар',
-      role: Role.USER,
-      occupation: 'Фінансовий аналітик',
-      phone: '+380932223344',
-    },
-    {
-      email: 'sofia.melnyk@iteam.ua',
-      password: 'User1234!',
-      fullName: 'Софія Мельник',
-      role: Role.ADMIN,
-      occupation: 'Операційний директор',
-      phone: '+380933334455',
-    },
-    {
-      email: 'andriy.shevchenko@iteam.ua',
-      password: 'User1234!',
-      fullName: 'Андрій Шевченко',
-      role: Role.USER,
-      occupation: 'Маркетолог',
-      phone: '+380934445566',
-    },
-    {
-      email: 'daryna.lysenko@iteam.ua',
-      password: 'User1234!',
-      fullName: 'Дарина Лисенко',
-      role: Role.USER,
-      occupation: 'Дизайнер',
-      phone: '+380935556677',
-    },
-    {
-      email: 'ivan.petrenko@iteam.ua',
-      password: 'User1234!',
-      fullName: 'Іван Петренко',
-      role: Role.USER,
-      occupation: 'Менеджер з продажів',
-      phone: '+380936667788',
     },
   ];
 
