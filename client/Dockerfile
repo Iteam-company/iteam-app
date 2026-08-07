@@ -1,5 +1,6 @@
 # ── Stage 1: deps ─────────────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
+# node:22 required — @tanstack/react-start and friends declare engines >=22.12.0
+FROM node:22-alpine AS deps
 
 WORKDIR /app
 
@@ -22,19 +23,18 @@ CMD ["npm", "run", "dev", "--", "--host"]
 # ── Stage 3: builder ──────────────────────────────────────────────────────────
 FROM deps AS builder
 
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 COPY . .
 RUN npm run build
 
-# ── Stage 4: runner (prod) ────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+# ── Stage 4: runner (prod) ──────────────────────────────────────────────────
+FROM builder AS runner
 
 WORKDIR /app
 
-# Vinxi/TanStack Start output is self-contained — no node_modules needed
-COPY --from=builder /app/.output ./.output
-
 EXPOSE 3000
-ENV PORT=3000
 ENV NODE_ENV=production
 
-CMD ["node", ".output/server/index.mjs"]
+CMD ["sh", "-c", "npm run preview -- --port ${PORT:-3000} --host"]

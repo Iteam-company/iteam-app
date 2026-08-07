@@ -8,15 +8,29 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 
 // Use string literals — these enums only exist in the generated client after migration
-const BoardType   = { LIST: 'LIST', KANBAN: 'KANBAN', SCRUM: 'SCRUM' } as const;
-const TaskStatus  = { TODO: 'TODO', IN_PROGRESS: 'IN_PROGRESS', IN_REVIEW: 'IN_REVIEW', DONE: 'DONE' } as const;
-const TaskPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' } as const;
+const BoardType = { LIST: 'LIST', KANBAN: 'KANBAN', SCRUM: 'SCRUM' } as const;
+const TaskStatus = {
+  TODO: 'TODO',
+  IN_PROGRESS: 'IN_PROGRESS',
+  IN_REVIEW: 'IN_REVIEW',
+  DONE: 'DONE',
+} as const;
+const TaskPriority = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  URGENT: 'URGENT',
+} as const;
 const TaskEstimate = { S: 'S', M: 'M', L: 'L', XL: 'XL' } as const;
-const NotifType   = { TASK_ASSIGNED: 'TASK_ASSIGNED', TASK_UPDATED: 'TASK_UPDATED', TASK_STATUS_CHANGED: 'TASK_STATUS_CHANGED' } as const;
+const NotifType = {
+  TASK_ASSIGNED: 'TASK_ASSIGNED',
+  TASK_UPDATED: 'TASK_UPDATED',
+  TASK_STATUS_CHANGED: 'TASK_STATUS_CHANGED',
+} as const;
 
-type TaskStatus   = typeof TaskStatus[keyof typeof TaskStatus];
-type TaskPriority = typeof TaskPriority[keyof typeof TaskPriority];
-type TaskEstimate = typeof TaskEstimate[keyof typeof TaskEstimate];
+type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
+type TaskPriority = (typeof TaskPriority)[keyof typeof TaskPriority];
+type TaskEstimate = (typeof TaskEstimate)[keyof typeof TaskEstimate];
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -42,11 +56,13 @@ async function main() {
     where: { id: 1 },
     update: {
       title: 'Iteam Technologies',
-      description: 'Українська продуктова компанія, що будує інструменти для операційної стійкості та управління командою.',
+      description:
+        'Українська продуктова компанія, що будує інструменти для операційної стійкості та управління командою.',
     },
     create: {
       title: 'Iteam Technologies',
-      description: 'Українська продуктова компанія, що будує інструменти для операційної стійкості та управління командою.',
+      description:
+        'Українська продуктова компанія, що будує інструменти для операційної стійкості та управління командою.',
     },
   });
 
@@ -159,15 +175,17 @@ async function main() {
     });
 
     userMap[seed.email] = u.id;
-    console.log(`  ✔ ${seed.role.padEnd(5)} ${seed.email}  /  ${seed.password}`);
+    console.log(
+      `  ✔ ${seed.role.padEnd(5)} ${seed.email}  /  ${seed.password}`,
+    );
   }
 
   const adminId = userMap['admin@gmail.com'];
-  const devId   = userMap['user@gmail.com'];
+  const devId = userMap['user@gmail.com'];
   const sofiaId = userMap['sofia.melnyk@iteam.ua'];
-  const darId   = userMap['daryna.lysenko@iteam.ua'];
-  const andId   = userMap['andriy.shevchenko@iteam.ua'];
-  const ivanId  = userMap['ivan.petrenko@iteam.ua'];
+  const darId = userMap['daryna.lysenko@iteam.ua'];
+  const andId = userMap['andriy.shevchenko@iteam.ua'];
+  const ivanId = userMap['ivan.petrenko@iteam.ua'];
 
   // Cast to any — board/task/notification don't exist in the old generated client.
   // After `prisma migrate dev` the client is regenerated and these resolve correctly.
@@ -179,30 +197,54 @@ async function main() {
   const kanban = await db.board.upsert({
     where: { id: 1 },
     update: { title: 'Product Board', type: BoardType.KANBAN },
-    create: { title: 'Product Board', type: BoardType.KANBAN, companyId: company.id, createdById: adminId },
+    create: {
+      title: 'Product Board',
+      type: BoardType.KANBAN,
+      companyId: company.id,
+      createdById: adminId,
+    },
   });
 
   const sprint = await db.board.upsert({
     where: { id: 2 },
     update: { title: 'Sprint 1', type: BoardType.SCRUM },
-    create: { title: 'Sprint 1', type: BoardType.SCRUM, companyId: company.id, createdById: sofiaId },
+    create: {
+      title: 'Sprint 1',
+      type: BoardType.SCRUM,
+      companyId: company.id,
+      createdById: sofiaId,
+    },
   });
 
   const list = await db.board.upsert({
     where: { id: 3 },
     update: { title: 'Marketing Tasks', type: BoardType.LIST },
-    create: { title: 'Marketing Tasks', type: BoardType.LIST, companyId: company.id, createdById: andId },
+    create: {
+      title: 'Marketing Tasks',
+      type: BoardType.LIST,
+      companyId: company.id,
+      createdById: andId,
+    },
   });
 
-  console.log(`  ✔ Boards   ${[kanban, sprint, list].map((b) => b.title).join(', ')}`);
+  console.log(
+    `  ✔ Boards   ${[kanban, sprint, list].map((b) => b.title).join(', ')}`,
+  );
 
   // ── Tasks ──────────────────────────────────────────────────────────────────
 
   type TaskSeed = {
-    title: string; description?: string; status: TaskStatus;
-    priority: TaskPriority; estimate?: TaskEstimate; estimateHours?: number;
-    boardId: number; createdById: number; assigneeIds: number[];
-    startDate?: Date; endDate?: Date;
+    title: string;
+    description?: string;
+    status: TaskStatus;
+    priority: TaskPriority;
+    estimate?: TaskEstimate;
+    estimateHours?: number;
+    boardId: number;
+    createdById: number;
+    assigneeIds: number[];
+    startDate?: Date;
+    endDate?: Date;
   };
 
   const TASKS: TaskSeed[] = [
@@ -351,7 +393,10 @@ async function main() {
   if (devTask) {
     await db.user.update({
       where: { id: devId },
-      data: { workingOnTaskId: devTask.id, statusNote: 'Пишу NotificationsService' },
+      data: {
+        workingOnTaskId: devTask.id,
+        statusNote: 'Пишу NotificationsService',
+      },
     });
   }
 
