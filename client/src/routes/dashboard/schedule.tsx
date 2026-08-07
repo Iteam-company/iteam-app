@@ -133,12 +133,6 @@ function formatMonthYear(year: number, month: number, locale: string) {
   return capitalize(name) + ' ' + year
 }
 
-function formatMonthShort(year: number, month: number, locale: string) {
-  return capitalize(
-    utcDay(year, month, 1).toLocaleDateString(locale, { month: 'short', timeZone: 'UTC' }),
-  )
-}
-
 function formatDayTitle(date: Date, locale: string) {
   return date.toLocaleDateString(locale, {
     day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
@@ -623,65 +617,60 @@ function resolveDay(date: Date, maps: DayMaps, defaults: Record<number, WorkDayS
 
 // ── Year view ─────────────────────────────────────────────────────────────────
 
-// Fixed track width: `grid-cols-7` would stretch each dot column to 1fr, and in
-// a wide month cell that scatters the dots into sparse vertical stripes.
-const DOT = 6      // px
-const DOT_GAP = 4  // px
-const DOT_GRID_W = DOT * 7 + DOT_GAP * 6
+// One continuous field of dots for the whole year — no month boxes. Seven
+// weekday rows, one column per week, running straight from Jan 1 to Dec 31.
+const DOT = 12     // px
+const DOT_GAP = 5  // px
+
+function daysInYear(year: number) {
+  return (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86_400_000
+}
 
 function YearView({
-  year, maps, defaults, todayKey, locale, onPickMonth,
-}: Omit<ViewProps, 'onSelectDay'> & { year: number; onPickMonth: (month: number) => void }) {
+  year, maps, defaults, todayKey, locale, onPickDay,
+}: Omit<ViewProps, 'onSelectDay'> & { year: number; onPickDay: (d: Date) => void }) {
+  const jan1 = utcDay(year, 1, 1)
+  const lead = dowIndex(jan1)               // blank cells before Jan 1
+  const total = daysInYear(year)
+
   return (
-    // A fixed 3/4/6-column grid rather than flex-wrap: wrapping leaves an
-    // orphan month on the last row and pins everything to the top.
-    <div className="grid h-full grid-cols-3 place-content-center justify-items-center gap-x-4 gap-y-5 overflow-y-auto py-2 sm:grid-cols-4 xl:grid-cols-6">
-      {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
-        const total = daysInMonthOf(year, month)
-        const startDow = dowIndex(utcDay(year, month, 1))
+    <div className="flex h-full items-center justify-center overflow-auto">
+      <div
+        className="grid"
+        style={{
+          // Filling down each column before moving right makes every column a
+          // calendar week and every row a weekday.
+          gridTemplateRows: `repeat(7, ${DOT}px)`,
+          gridAutoFlow: 'column',
+          gridAutoColumns: `${DOT}px`,
+          gap: `${DOT_GAP}px`,
+        }}
+      >
+        {Array.from({ length: lead }).map((_, i) => (
+          <span key={`pad-${i}`} style={{ width: DOT, height: DOT }} />
+        ))}
 
-        return (
-          <button
-            key={month}
-            onClick={() => onPickMonth(month)}
-            className="group flex shrink-0 flex-col items-start rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted/50"
-          >
-            <span className="mb-1.5 text-[11px] font-semibold capitalize text-primary">
-              {formatMonthShort(year, month, locale)}
-            </span>
-            <div
-              className="grid"
-              style={{
-                gridTemplateColumns: `repeat(7, ${DOT}px)`,
-                gap: `${DOT_GAP}px`,
-                width: DOT_GRID_W,
-              }}
-            >
-              {Array.from({ length: startDow }).map((_, i) => (
-                <span key={`pad-${i}`} style={{ width: DOT, height: DOT }} />
-              ))}
-              {Array.from({ length: total }, (_, i) => i + 1).map((day) => {
-                const date = utcDay(year, month, day)
-                const { key, status, confirmed } = resolveDay(date, maps, defaults)
-                const isToday = key === todayKey
+        {Array.from({ length: total }, (_, i) => i).map((offset) => {
+          const date = addDays(jan1, offset)
+          const { key, status, confirmed } = resolveDay(date, maps, defaults)
+          const isToday = key === todayKey
 
-                return (
-                  <span
-                    key={key}
-                    style={{ width: DOT, height: DOT }}
-                    className={[
-                      'rounded-full',
-                      isToday
-                        ? 'bg-primary outline-2 outline-offset-1 outline-primary/40'
-                        : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
-                    ].join(' ')}
-                  />
-                )
-              })}
-            </div>
-          </button>
-        )
-      })}
+          return (
+            <button
+              key={key}
+              onClick={() => onPickDay(date)}
+              title={formatDayTitle(date, locale)}
+              style={{ width: DOT, height: DOT }}
+              className={[
+                'rounded-full transition-transform hover:scale-125',
+                isToday
+                  ? 'bg-primary ring-2 ring-primary/40'
+                  : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
+              ].join(' ')}
+            />
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -759,7 +748,6 @@ function MonthView({
 // window drawn as a block in each day column. This is what gives the zoomed-in
 // level something to actually show.
 
-const HOUR_ROW_H = 46          // px per hour
 const GUTTER = '3.25rem'
 const DAY_START_FALLBACK = 8
 const DAY_END_FALLBACK = 19
@@ -820,12 +808,15 @@ function WeekView({
         })}
       </div>
 
-      {/* pt-2 keeps the first hour label from clipping — it sits on the rule,
-          vertically centred, so half of it hangs above the grid. */}
-      <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+      {/* The grid fills the available height rather than scrolling, so a whole
+          day is always visible and nothing gets clipped at the fold. Everything
+          inside is positioned as a percentage of the hour range.
+          pt-2/pb-2 give the first and last hour labels room — they sit on their
+          rule, vertically centred, so half hangs outside the grid. */}
+      <div className="min-h-0 flex-1 py-2">
         <div
-          className="relative grid"
-          style={{ gridTemplateColumns, height: hours.length * HOUR_ROW_H }}
+          className="relative grid h-full"
+          style={{ gridTemplateColumns }}
         >
           {/* Hour labels */}
           <div className="relative">
@@ -833,7 +824,7 @@ function WeekView({
               <span
                 key={h}
                 className="absolute right-2 -translate-y-1/2 text-[10px] tabular-nums text-muted-foreground"
-                style={{ top: i * HOUR_ROW_H }}
+                style={{ top: `${(i / hours.length) * 100}%` }}
               >
                 {String(h).padStart(2, '0')}:00
               </span>
@@ -856,7 +847,10 @@ function WeekView({
                   // Tint every column, confirmed or merely inferred, so a
                   // weekend still reads as a weekend in the time grid.
                   STATUS_BG_DIM[status],
-                  isToday ? 'ring-1 ring-primary/30' : '',
+                  // ring-inset draws the ring inside the column's own box, so
+                  // it can't be clipped by the grid edge the way an outset ring
+                  // was. ring-2 makes it read at a glance.
+                  isToday ? 'ring-2 ring-inset ring-primary' : '',
                 ].join(' ')}
               >
                 {/* Hour rules */}
@@ -864,7 +858,7 @@ function WeekView({
                   <span
                     key={h}
                     className="absolute inset-x-0 border-t border-border/25"
-                    style={{ top: i * HOUR_ROW_H }}
+                    style={{ top: `${(i / hours.length) * 100}%` }}
                   />
                 ))}
 
@@ -876,8 +870,9 @@ function WeekView({
                       STATUS_BG[status],
                     ].join(' ')}
                     style={{
-                      top: (start! - from) * HOUR_ROW_H,
-                      height: Math.max(22, (end! - start!) * HOUR_ROW_H),
+                      top: `${((start! - from) / hours.length) * 100}%`,
+                      height: `${((end! - start!) / hours.length) * 100}%`,
+                      minHeight: 22,
                     }}
                   >
                     <span className="shrink-0 text-[10px] font-medium tabular-nums opacity-70">
@@ -982,9 +977,9 @@ function ZoomCalendar({
     { level: WEEK,  label: t('schedule.week') },
   ]
 
-  // Tapping a month in the year view zooms into it, iOS-style.
-  const pickMonth = (m: number) => {
-    setAnchor(utcDay(year, m, 1))
+  // Tapping a dot in the year view zooms to that day's month, iOS-style.
+  const pickDay = (d: Date) => {
+    setAnchor(d)
     snap(MONTH)
   }
 
@@ -1052,7 +1047,7 @@ function ZoomCalendar({
                 {lvl === YEAR && (
                   <YearView
                     year={year} maps={maps} defaults={defaults}
-                    todayKey={todayKey} locale={locale} onPickMonth={pickMonth}
+                    todayKey={todayKey} locale={locale} onPickDay={pickDay}
                   />
                 )}
                 {lvl === MONTH && (
