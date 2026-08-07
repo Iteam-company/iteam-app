@@ -623,20 +623,16 @@ function resolveDay(date: Date, maps: DayMaps, defaults: Record<number, WorkDayS
 
 // ── Year view ─────────────────────────────────────────────────────────────────
 
-// One continuous field of dots for the whole year — no month boxes. Seven
-// weekday rows, one column per week, running straight from Jan 1 to Dec 31.
-// Dot size and spacing are derived from the measured container so the field
-// spreads across the whole area rather than sitting as a fixed block in the
-// middle of it.
+// The whole year as a matrix: one row per month, one column per day-of-month.
+// At 31x12 (~2.6:1) it fits a wide, short layer far better than a 7x53 weekday
+// band (~7.6:1), which had to be stretched and still left the area half empty.
+// Dot size and spacing are derived from the measured container so the grid
+// fills the space it is given.
 
 /** Target gap as a fraction of the dot size, before spare space is shared out. */
 const GAP_RATIO = 0.4
-/** Rows would otherwise drift into sparse stripes on a short, wide layer. */
-const MAX_ROW_GAP = 1.3
-
-function daysInYear(year: number) {
-  return (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86_400_000
-}
+const MONTHS_IN_YEAR = 12
+const MAX_DAYS_IN_MONTH = 31
 
 function useElementSize<T extends HTMLElement>() {
   const ref = useRef<T | null>(null)
@@ -656,8 +652,8 @@ function useElementSize<T extends HTMLElement>() {
   return [ref, size] as const
 }
 
-/** Left gutter for weekday labels, top strip for month labels. */
-const GUTTER_W = 34
+/** Left gutter for month labels, top strip for day-of-month numbers. */
+const GUTTER_W = 46
 const HEADER_H = 18
 
 function YearView({
@@ -665,107 +661,101 @@ function YearView({
 }: Omit<ViewProps, 'onSelectDay'> & { year: number; onPickDay: (d: Date) => void }) {
   const [wrapRef, { w, h }] = useElementSize<HTMLDivElement>()
 
-  const jan1 = utcDay(year, 1, 1)
-  const lead = dowIndex(jan1)               // blank cells before Jan 1
-  const total = daysInYear(year)
-  const cols = Math.ceil((lead + total) / 7)
-
   // Whichever axis runs out first sets the dot size; the leftover space on the
   // other axis is then shared between the gaps.
   const gridW = Math.max(0, w - GUTTER_W)
   const gridH = Math.max(0, h - HEADER_H)
   const dot = Math.max(3, Math.floor(Math.min(
-    gridW / (cols + (cols - 1) * GAP_RATIO),
-    gridH / (7 + 6 * GAP_RATIO),
+    gridW / (MAX_DAYS_IN_MONTH + (MAX_DAYS_IN_MONTH - 1) * GAP_RATIO),
+    gridH / (MONTHS_IN_YEAR + (MONTHS_IN_YEAR - 1) * GAP_RATIO),
   )))
-  const colGap = Math.max(0, (gridW - cols * dot) / (cols - 1))
-  const rowGap = Math.max(0, Math.min((gridH - 7 * dot) / 6, dot * MAX_ROW_GAP))
-  const colPitch = dot + colGap
+  const colGap = Math.max(0, (gridW - MAX_DAYS_IN_MONTH * dot) / (MAX_DAYS_IN_MONTH - 1))
+  const rowGap = Math.max(0, (gridH - MONTHS_IN_YEAR * dot) / (MONTHS_IN_YEAR - 1))
 
-  // Where each month begins, in grid columns — labels for the top strip.
-  const monthStarts = Array.from({ length: 12 }, (_, i) => {
-    const first = utcDay(year, i + 1, 1)
-    const offset = Math.round((first.getTime() - jan1.getTime()) / 86_400_000)
-    return { month: i + 1, col: Math.floor((lead + offset) / 7) }
-  })
-
-  const dowLabels = Array.from({ length: 7 }, (_, i) => getDowLabel(i, locale, 'short'))
+  const months = Array.from({ length: MONTHS_IN_YEAR }, (_, i) => i + 1)
+  const dayNumbers = Array.from({ length: MAX_DAYS_IN_MONTH }, (_, i) => i + 1)
+  const cellColumns = `repeat(${MAX_DAYS_IN_MONTH}, ${dot}px)`
 
   return (
     <div ref={wrapRef} className="flex h-full w-full flex-col justify-center overflow-hidden">
       {w > 0 && (
         <>
-          {/* Month labels — an axis across the top, not month boxes */}
+          {/* Day-of-month axis */}
           <div className="flex shrink-0" style={{ height: HEADER_H }}>
             <div style={{ width: GUTTER_W }} />
-            <div className="relative flex-1">
-              {monthStarts.map(({ month, col }) => (
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: cellColumns, columnGap: `${colGap}px` }}
+            >
+              {dayNumbers.map((day) => (
                 <span
-                  key={month}
-                  className="absolute top-0 text-[10px] font-medium capitalize text-muted-foreground"
-                  style={{ left: col * colPitch }}
+                  key={day}
+                  className="text-center text-[10px] leading-none tabular-nums text-muted-foreground"
                 >
-                  {formatMonthShort(year, month, locale)}
+                  {day}
                 </span>
               ))}
             </div>
           </div>
 
           <div className="flex">
-            {/* Weekday labels — one per row, so a row can actually be read */}
+            {/* Month axis */}
             <div
               className="grid shrink-0"
               style={{
                 width: GUTTER_W,
-                gridTemplateRows: `repeat(7, ${dot}px)`,
+                gridTemplateRows: `repeat(${MONTHS_IN_YEAR}, ${dot}px)`,
                 rowGap: `${rowGap}px`,
               }}
             >
-              {dowLabels.map((label) => (
+              {months.map((month) => (
                 <span
-                  key={label}
+                  key={month}
                   className="flex items-center text-[10px] capitalize leading-none text-muted-foreground"
                 >
-                  {label}
+                  {formatMonthShort(year, month, locale)}
                 </span>
               ))}
             </div>
 
+            {/* One row per month, one column per day-of-month. Short months
+                simply leave their trailing cells empty. */}
             <div
               className="grid"
               style={{
-                // Filling down each column before moving right makes every
-                // column a calendar week and every row a weekday.
-                gridTemplateRows: `repeat(7, ${dot}px)`,
-                gridAutoFlow: 'column',
-                gridAutoColumns: `${dot}px`,
+                gridTemplateColumns: cellColumns,
+                gridTemplateRows: `repeat(${MONTHS_IN_YEAR}, ${dot}px)`,
                 columnGap: `${colGap}px`,
                 rowGap: `${rowGap}px`,
               }}
             >
-              {Array.from({ length: lead }).map((_, i) => (
-                <span key={`pad-${i}`} style={{ width: dot, height: dot }} />
-              ))}
+              {months.map((month) => {
+                const length = daysInMonthOf(year, month)
 
-              {Array.from({ length: total }, (_, i) => i).map((offset) => {
-                const date = addDays(jan1, offset)
-                const { key, status, confirmed } = resolveDay(date, maps, defaults)
-                const isToday = key === todayKey
+                return dayNumbers.map((day) => {
+                  if (day > length) {
+                    return <span key={`${month}-${day}`} style={{ width: dot, height: dot }} />
+                  }
 
-                return (
-                  <button
-                    key={key}
-                    onClick={() => onPickDay(date)}
-                    title={formatDayTitle(date, locale)}
-                    style={{ width: dot, height: dot }}
-                    className={[
-                      'rounded-full transition-transform hover:scale-125',
-                      isToday
-                        ? 'bg-primary ring-2 ring-primary/40'
-                        : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
-                    ].join(' ')}
-                  />
-                )
+                  const date = utcDay(year, month, day)
+                  const { key, status, confirmed } = resolveDay(date, maps, defaults)
+                  const isToday = key === todayKey
+
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => onPickDay(date)}
+                      title={formatDayTitle(date, locale)}
+                      style={{ width: dot, height: dot }}
+                      className={[
+                        'rounded-full transition-transform hover:scale-125',
+                        isToday
+                          ? 'bg-primary ring-2 ring-primary/40'
+                          : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
+                      ].join(' ')}
+                    />
+                  )
+                })
               })}
             </div>
           </div>
