@@ -18,12 +18,12 @@ export class WorkDaysService {
   }
 
   /**
-   * Work days + completed tasks for a range.
+   * Work days for a range.
    * Omit `month` to get the whole year — the year calendar view needs all 12
    * months at once, and one query beats twelve round-trips.
    */
   async getRange(userId: number, year: number, month?: number) {
-    const user = await this.requireUser(userId);
+    await this.requireUser(userId);
 
     const hasMonth = month != null && !Number.isNaN(month);
     const start = hasMonth
@@ -33,54 +33,31 @@ export class WorkDaysService {
       ? new Date(Date.UTC(year, month!, 0, 23, 59, 59, 999))
       : new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const workDays = await (this.prisma as any).workDay.findMany({
+    const workDays = await this.prisma.workDay.findMany({
       where: { userId, date: { gte: start, lte: end } },
       orderBy: { date: 'asc' },
     });
 
-    // Get tasks completed this month that this user is assigned to
-    const completedTasks = await this.prisma.task.findMany({
-      where: {
-        companyId: user.companyId ?? undefined,
-        assignees: { some: { userId } },
-        status: 'DONE',
-        updatedAt: { gte: start, lte: end },
-      },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        priority: true,
-        updatedAt: true,
-        board: { select: { title: true } },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
-
     // Compute stats
-    const workingDays = workDays.filter((d: any) => d.status === 'WORKING').length;
+    const workingDays = workDays.filter((d) => d.status === 'WORKING').length;
     const totalHours = workDays
-      .filter((d: any) => d.startTime && d.endTime)
-      .reduce((sum: number, d: any) => {
-        return sum + (timeToMinutes(d.endTime) - timeToMinutes(d.startTime)) / 60;
+      .filter((d) => d.startTime && d.endTime)
+      .reduce((sum, d) => {
+        return sum + (timeToMinutes(d.endTime!) - timeToMinutes(d.startTime!)) / 60;
       }, 0);
 
     return {
       workDays,
-      completedTasks,
       stats: {
         workingDays,
         totalHours: Math.round(totalHours * 10) / 10,
-        completedCount: completedTasks.length,
       },
     };
   }
 
   async upsertDay(userId: number, date: string, dto: UpsertWorkDayDto) {
     const dateObj = new Date(date + 'T00:00:00.000Z');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (this.prisma as any).workDay.upsert({
+    return this.prisma.workDay.upsert({
       where: { userId_date: { userId, date: dateObj } },
       update: { status: dto.status, startTime: dto.startTime ?? null, endTime: dto.endTime ?? null },
       create: { userId, date: dateObj, status: dto.status, startTime: dto.startTime, endTime: dto.endTime },

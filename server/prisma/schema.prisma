@@ -7,55 +7,30 @@ datasource db {
   provider = "postgresql"
 }
 
-// ── Enums ─────────────────────────────────────────────────────────────────────
+// #Enums
 
 enum Role {
   USER
   ADMIN
 }
 
-enum BoardType {
-  LIST
-  KANBAN
-  SCRUM
-}
-
-enum TaskStatus {
-  TODO
-  IN_PROGRESS
-  IN_REVIEW
-  DONE
-}
-
-enum TaskPriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
-}
-
-enum TaskEstimate {
-  S
-  M
-  L
-  XL
-}
-
 enum NotifType {
-  TASK_ASSIGNED
-  TASK_UNASSIGNED
-  TASK_STATUS_CHANGED
-  TASK_UPDATED
+  ONBOARDING_START
+  ONBOARDING_END
+  PASSWORD_RESET // after user's password is reset
+  JOB_ASSIGNED // when a user is assigned to a specific job
 }
 
 enum WorkDayStatus {
   WORKING
-  WEEKEND
-  SICK_LEAVE
+  WEEKEND_PAID
+  WEEKEND_UNPAID
+  SICK_LEAVE_UNPAID
+  SICK_LEAVE_PAID
   VACATION
 }
 
-// ── Models ────────────────────────────────────────────────────────────────────
+// #Models
 
 model User {
   id         Int       @id @default(autoincrement())
@@ -72,16 +47,11 @@ model User {
   resetTokenExpiry DateTime?
 
   // Status / working-on
-  workingOnTask    Task?    @relation("WorkingOnTask", fields: [workingOnTaskId], references: [id], onDelete: SetNull)
-  workingOnTaskId  Int?
   statusNote       String?
 
   company   Company? @relation(fields: [companyId], references: [id])
   companyId Int?
 
-  boardsCreated    Board[]        @relation("BoardCreatedBy")
-  tasksCreated     Task[]         @relation("TaskCreatedBy")
-  taskAssignments  TaskAssignee[]
   notifications    Notification[]
   workDays         WorkDay[]
 
@@ -98,8 +68,6 @@ model Company {
   users    User[]
   roles    CompanyRole[]
   settings CompanySettings?
-  boards   Board[]
-  tasks    Task[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -131,57 +99,6 @@ model CompanyRole {
   @@unique([name, companyId])
 }
 
-model Board {
-  id          Int       @id @default(autoincrement())
-  title       String
-  type        BoardType @default(KANBAN)
-  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  companyId   Int
-  createdBy   User      @relation("BoardCreatedBy", fields: [createdById], references: [id])
-  createdById Int
-
-  tasks Task[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Task {
-  id            Int          @id @default(autoincrement())
-  title         String
-  description   String?
-  status        TaskStatus   @default(TODO)
-  priority      TaskPriority @default(MEDIUM)
-  estimate      TaskEstimate?
-  estimateHours Float?
-  startDate     DateTime?
-  endDate       DateTime?
-
-  board         Board   @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  boardId       Int
-  company       Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  companyId     Int
-  createdBy     User    @relation("TaskCreatedBy", fields: [createdById], references: [id])
-  createdById   Int
-
-  assignees     TaskAssignee[]
-  notifications Notification[]
-  workingOnBy   User[]         @relation("WorkingOnTask")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model TaskAssignee {
-  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  taskId     Int
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     Int
-  assignedAt DateTime @default(now())
-
-  @@id([taskId, userId])
-}
-
 model Notification {
   id     Int       @id @default(autoincrement())
   user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -190,8 +107,6 @@ model Notification {
   title  String
   body   String?
   read   Boolean   @default(false)
-  task   Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  taskId Int?
 
   createdAt DateTime @default(now())
 }
