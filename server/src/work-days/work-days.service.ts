@@ -2,11 +2,6 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpsertWorkDayDto } from './dto/work-day.dto';
 
-function timeToMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
-
 @Injectable()
 export class WorkDaysService {
   constructor(private readonly prisma: PrismaService) {}
@@ -18,7 +13,9 @@ export class WorkDaysService {
   }
 
   /**
-   * Work days for a range.
+   * WorkDay records for a range — each one an exception to a normal working
+   * day (weekend, sick leave, vacation, holiday). A date with no record is a
+   * regular working day.
    * Omit `month` to get the whole year — the year calendar view needs all 12
    * months at once, and one query beats twelve round-trips.
    */
@@ -38,19 +35,10 @@ export class WorkDaysService {
       orderBy: { date: 'asc' },
     });
 
-    // Compute stats
-    const workingDays = workDays.filter((d) => d.status === 'WORKING').length;
-    const totalHours = workDays
-      .filter((d) => d.startTime && d.endTime)
-      .reduce((sum, d) => {
-        return sum + (timeToMinutes(d.endTime!) - timeToMinutes(d.startTime!)) / 60;
-      }, 0);
-
     return {
       workDays,
       stats: {
-        workingDays,
-        totalHours: Math.round(totalHours * 10) / 10,
+        daysOff: workDays.length,
       },
     };
   }
@@ -59,8 +47,15 @@ export class WorkDaysService {
     const dateObj = new Date(date + 'T00:00:00.000Z');
     return this.prisma.workDay.upsert({
       where: { userId_date: { userId, date: dateObj } },
-      update: { status: dto.status, startTime: dto.startTime ?? null, endTime: dto.endTime ?? null },
-      create: { userId, date: dateObj, status: dto.status, startTime: dto.startTime, endTime: dto.endTime },
+      update: { status: dto.status },
+      create: { userId, date: dateObj, status: dto.status },
     });
+  }
+
+  /** Clears an exception, reverting the date back to a regular working day. */
+  async removeDay(userId: number, date: string) {
+    const dateObj = new Date(date + 'T00:00:00.000Z');
+    await this.prisma.workDay.deleteMany({ where: { userId, date: dateObj } });
+    return { deleted: true };
   }
 }

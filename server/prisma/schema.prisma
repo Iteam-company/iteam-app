@@ -22,12 +22,12 @@ enum NotifType {
 }
 
 enum WorkDayStatus {
-  WORKING
   WEEKEND_PAID
   WEEKEND_UNPAID
   SICK_LEAVE_UNPAID
   SICK_LEAVE_PAID
   VACATION
+  HOLIDAY
 }
 
 // #Models
@@ -54,6 +54,7 @@ model User {
 
   notifications    Notification[]
   workDays         WorkDay[]
+  workEntries      WorkTimeEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -116,12 +117,24 @@ model WorkDay {
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    Int
   date      DateTime      @db.Date
-  status    WorkDayStatus @default(WORKING)
-  startTime String?
-  endTime   String?
+  status    WorkDayStatus
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([userId, date])
+}
+
+model WorkTimeEntry {
+  id            Int           @id @default(autoincrement())
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        Int
+  // project       Project?
+  description   String?
+  date          DateTime      @db.Date
+  startTime     String?
+  endTime       String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
