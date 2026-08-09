@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   BarChart3, Bell, Building2, CalendarDays, CheckCheck,
-  ClipboardList, Home, LogOut, Mail, Settings, User, Users,
+  Home, LogOut, Mail, Settings, User, Users,
 } from 'lucide-react'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
@@ -14,7 +14,7 @@ import { Separator } from '#/components/ui/separator'
 import { Button } from '#/components/ui/button'
 import { useMyCompany } from '#/lib/company/mutations'
 import { clearToken } from '#/lib/auth/api'
-import { useMarkAllRead, useMarkRead, useNotifications, useUnreadCount } from '#/lib/tasks/mutations'
+import { useMarkAllRead, useMarkRead, useNotifications, useUnreadCount } from '#/lib/notifications/mutations'
 
 export const Route = createFileRoute('/dashboard')({
   beforeLoad: () => {
@@ -29,7 +29,6 @@ const NAV = [
   { to: '/dashboard/me', label: 'nav.me', icon: User, exact: false, soon: false },
   { to: '/dashboard/schedule', label: 'nav.schedule', icon: CalendarDays, exact: false, soon: false },
   { to: '/dashboard/okr', label: 'nav.okr', icon: BarChart3, exact: false, soon: true },
-  { to: '/dashboard/tasks', label: 'nav.tasks', icon: ClipboardList, exact: false, soon: false },
   { to: '/dashboard/team', label: 'nav.people', icon: Users, exact: false, soon: false },
   { to: '/dashboard/automation', label: 'nav.automation', icon: Mail, exact: false, soon: false },
   { to: '/dashboard/company', label: 'nav.company', icon: Building2, exact: false, soon: false },

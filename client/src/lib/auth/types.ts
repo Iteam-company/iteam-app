@@ -57,7 +57,6 @@ export interface MeResponse {
   occupation: string | null
   role: 'USER' | 'ADMIN'
   companyId: number | null
-  workingOnTaskId: number | null
   statusNote: string | null
   salary?: number | null
 }
