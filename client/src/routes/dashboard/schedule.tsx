@@ -3,7 +3,7 @@ import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronLeft, ChevronRight, Loader2, Pencil } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Pencil, X } from 'lucide-react'
 import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import {
@@ -13,78 +13,10 @@ import { Label } from '#/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '#/components/ui/select'
-import { useMe } from '#/lib/auth/mutations'
-import { useMonthData, useUpsertWorkDay, useYearData } from '#/lib/workdays/mutations'
-import type { CompletedTask, MonthData, WorkDay, WorkDayStatus } from '#/lib/workdays/types'
+import { useMonthData, useRemoveWorkDay, useUpsertWorkDay, useYearData } from '#/lib/workdays/mutations'
+import type { MonthData, WorkDay, WorkDayStatus } from '#/lib/workdays/types'
 
 export const Route = createFileRoute('/dashboard/schedule')({ component: SchedulePage, ssr: false })
-
-// ── Custom time picker ────────────────────────────────────────────────────────
-
-const HOURS   = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
-const MINUTES = ['00','05','10','15','20','25','30','35','40','45','50','55']
-
-function TimePicker({
-  value,
-  onChange,
-  minTime,
-}: {
-  value: string
-  onChange: (v: string) => void
-  minTime?: string  // "HH:MM" — all selectable times must be strictly after this
-}) {
-  const [h, m] = value ? value.split(':') : ['', '']
-  const [minH, minM] = minTime ? minTime.split(':') : ['', '']
-
-  const availableHours = minH
-    ? HOURS.filter((hr) => Number(hr) >= Number(minH))
-    : HOURS
-
-  // Same hour as min → only allow minutes strictly greater than minM
-  const availableMinutes = (minH && h === minH)
-    ? MINUTES.filter((mn) => Number(mn) > Number(minM))
-    : MINUTES
-
-  const setH = (newH: string) => {
-    if (newH === '_') { onChange(''); return }
-    // If same hour as min, ensure minute is still valid
-    let newM = m || '00'
-    if (minH && newH === minH && Number(newM) <= Number(minM)) {
-      newM = MINUTES.find((mn) => Number(mn) > Number(minM)) ?? ''
-      if (!newM) { onChange(''); return }
-    }
-    onChange(`${newH}:${newM}`)
-  }
-
-  const setM = (newM: string) => {
-    if (newM === '_') { onChange(''); return }
-    onChange(`${h || '00'}:${newM}`)
-  }
-
-  return (
-    <div className="flex items-center gap-1">
-      <Select value={h || '_'} onValueChange={setH}>
-        <SelectTrigger className="h-8 w-17 font-mono text-sm">
-          <SelectValue placeholder="HH" />
-        </SelectTrigger>
-        <SelectContent className="max-h-52">
-          <SelectItem value="_">—</SelectItem>
-          {availableHours.map((hr) => <SelectItem key={hr} value={hr}>{hr}</SelectItem>)}
-        </SelectContent>
-      </Select>
-      <span className="text-muted-foreground font-semibold">:</span>
-      <Select value={m || '_'} onValueChange={setM}>
-        <SelectTrigger className="h-8 w-17 font-mono text-sm">
-          <SelectValue placeholder="MM" />
-        </SelectTrigger>
-        <SelectContent className="max-h-52">
-          <SelectItem value="_">—</SelectItem>
-          {availableMinutes.map((mn) => <SelectItem key={mn} value={mn}>{mn}</SelectItem>)}
-        </SelectContent>
-      </Select>
-    </div>
-  )
-}
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -161,139 +93,123 @@ function formatWeekRange(start: Date, locale: string) {
   return `${startLabel} – ${endLabel}`
 }
 
-/** "09:30" → 9.5 */
-function timeToHours(t: string) {
-  const [h, m] = t.split(':').map(Number)
-  return h + (m || 0) / 60
-}
-
-const DEFAULT_SCHEDULE: Record<number, WorkDayStatus> = {
-  0: 'WORKING', 1: 'WORKING', 2: 'WORKING', 3: 'WORKING', 4: 'WORKING',
-  5: 'WEEKEND', 6: 'WEEKEND',
-}
-
-function getWeeklyDefaults(userId: number): Record<number, WorkDayStatus> {
-  try {
-    return JSON.parse(localStorage.getItem(`weeklySchedule_${userId}`) ?? 'null') ?? DEFAULT_SCHEDULE
-  } catch { return DEFAULT_SCHEDULE }
-}
-
 // ── Status styles ─────────────────────────────────────────────────────────────
+//
+// A date with no WorkDay record is an implicit regular working day — there is
+// no "WORKING" status anymore, only exceptions. Colors below only apply to
+// confirmed (recorded) exceptions; unmarked days render neutrally.
 
-// Confirmed (day has an actual WorkDay record)
-const STATUS_BG: Record<WorkDayStatus, string> = {
-  WORKING:    'bg-blue-500/20',
-  WEEKEND:    'bg-amber-400/25',
-  SICK_LEAVE: 'bg-rose-500/20',
-  VACATION:   'bg-emerald-500/20',
+const STATUS_ORDER: WorkDayStatus[] = [
+  'WEEKEND_PAID', 'WEEKEND_UNPAID',
+  'SICK_LEAVE_PAID', 'SICK_LEAVE_UNPAID',
+  'VACATION', 'HOLIDAY',
+]
+
+const STATUS_LABEL_KEY: Record<WorkDayStatus, string> = {
+  WEEKEND_PAID: 'me.statusWeekendPaid',
+  WEEKEND_UNPAID: 'me.statusWeekendUnpaid',
+  SICK_LEAVE_PAID: 'me.statusSickLeavePaid',
+  SICK_LEAVE_UNPAID: 'me.statusSickLeaveUnpaid',
+  VACATION: 'me.statusVacation',
+  HOLIDAY: 'me.statusHoliday',
 }
 
-// Inferred from weekly-schedule defaults (dimmer)
-const STATUS_BG_DIM: Record<WorkDayStatus, string> = {
-  WORKING:    'bg-blue-500/8',
-  WEEKEND:    'bg-amber-400/10',
-  SICK_LEAVE: 'bg-rose-500/8',
-  VACATION:   'bg-emerald-500/8',
+const STATUS_BG: Record<WorkDayStatus, string> = {
+  WEEKEND_PAID: 'bg-amber-400/25',
+  WEEKEND_UNPAID: 'bg-amber-600/25',
+  SICK_LEAVE_PAID: 'bg-rose-500/20',
+  SICK_LEAVE_UNPAID: 'bg-rose-700/20',
+  VACATION: 'bg-emerald-500/20',
+  HOLIDAY: 'bg-violet-500/20',
 }
 
 const STATUS_SOLID: Record<WorkDayStatus, string> = {
-  WORKING:    'bg-blue-500',
-  WEEKEND:    'bg-amber-400',
-  SICK_LEAVE: 'bg-rose-500',
-  VACATION:   'bg-emerald-500',
-}
-
-const STATUS_DOT_DIM: Record<WorkDayStatus, string> = {
-  WORKING:    'bg-blue-500/30',
-  WEEKEND:    'bg-amber-400/35',
-  SICK_LEAVE: 'bg-rose-500/30',
-  VACATION:   'bg-emerald-500/30',
+  WEEKEND_PAID: 'bg-amber-400',
+  WEEKEND_UNPAID: 'bg-amber-600',
+  SICK_LEAVE_PAID: 'bg-rose-500',
+  SICK_LEAVE_UNPAID: 'bg-rose-700',
+  VACATION: 'bg-emerald-500',
+  HOLIDAY: 'bg-violet-500',
 }
 
 const STATUS_BADGE: Record<WorkDayStatus, string> = {
-  WORKING:    'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-  WEEKEND:    'bg-amber-400/10 text-amber-600 dark:text-amber-400',
-  SICK_LEAVE: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-  VACATION:   'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  WEEKEND_PAID: 'bg-amber-400/10 text-amber-600 dark:text-amber-400',
+  WEEKEND_UNPAID: 'bg-amber-600/10 text-amber-700 dark:text-amber-500',
+  SICK_LEAVE_PAID: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+  SICK_LEAVE_UNPAID: 'bg-rose-700/10 text-rose-700 dark:text-rose-500',
+  VACATION: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  HOLIDAY: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
 }
 
-const PRIORITY_COLOR: Record<string, string> = {
-  LOW: 'text-muted-foreground', MEDIUM: 'text-blue-500',
-  HIGH: 'text-amber-500',       URGENT: 'text-destructive',
-}
+/** Neutral treatment for a day with no exception record. */
+const NEUTRAL_DOT = 'bg-muted-foreground/20'
 
 // ── Day lookup ────────────────────────────────────────────────────────────────
 
 interface DayMaps {
   workDayMap: Map<string, WorkDay>
-  tasksByDay: Map<string, CompletedTask[]>
 }
 
-/** Merge any number of range payloads into day-keyed lookups. */
+/** Merge any number of range payloads into a day-keyed lookup. */
 function buildDayMaps(datasets: (MonthData | undefined)[]): DayMaps {
   const workDayMap = new Map<string, WorkDay>()
-  const tasksByDay = new Map<string, CompletedTask[]>()
-
   for (const data of datasets) {
     for (const wd of data?.workDays ?? []) workDayMap.set(toKey(wd.date), wd)
-    for (const task of data?.completedTasks ?? []) {
-      const k = toKey(task.updatedAt)
-      if (!tasksByDay.has(k)) tasksByDay.set(k, [])
-      tasksByDay.get(k)!.push(task)
-    }
   }
+  return { workDayMap }
+}
 
-  return { workDayMap, tasksByDay }
+/** Resolve a day's exception status, if any. Days with no record are regular working days. */
+function resolveDay(date: Date, maps: DayMaps) {
+  const key = toKey(date.toISOString())
+  const workDay = maps.workDayMap.get(key)
+  return { key, workDay, status: workDay?.status, confirmed: Boolean(workDay) }
 }
 
 // ── DayModal ──────────────────────────────────────────────────────────────────
+//
+// Kept deliberately simple: pick one of the six exception statuses, or clear
+// the day back to a regular working day. Per-day start/end time entry used to
+// live here — it depended on WorkDay.startTime/endTime, which the backend
+// dropped in the work-day status rework. Time logging will get its own flow
+// once the WorkTimeEntry endpoint exists (see server/prisma/schema.prisma);
+// nothing here should try to rebuild it in the meantime.
 
 interface DayModalProps {
   open: boolean
   onClose: () => void
   date: Date
   workDay: WorkDay | undefined
-  tasksOnDay: CompletedTask[]
-  defaults: Record<number, WorkDayStatus>
 }
 
-function DayModal({ open, onClose, date, workDay, tasksOnDay, defaults }: DayModalProps) {
+function DayModal({ open, onClose, date, workDay }: DayModalProps) {
   const { t, i18n } = useTranslation()
   const upsert = useUpsertWorkDay()
+  const removeDay = useRemoveWorkDay()
   const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-US'
 
-  const defaultStatus = defaults[dowIndex(date)]
   const [editing, setEditing] = useState(!workDay)
-  const [status, setStatus] = useState<WorkDayStatus>(workDay?.status ?? defaultStatus)
-  const [startTime, setStartTime] = useState(workDay?.startTime ?? '')
-  const [endTime, setEndTime] = useState(workDay?.endTime ?? '')
+  const [status, setStatus] = useState<WorkDayStatus>(workDay?.status ?? STATUS_ORDER[0])
 
   // Sync when the selected day changes
   useEffect(() => {
     setEditing(!workDay)
-    setStatus(workDay?.status ?? defaults[dowIndex(date)])
-    setStartTime(workDay?.startTime ?? '')
-    setEndTime(workDay?.endTime ?? '')
+    setStatus(workDay?.status ?? STATUS_ORDER[0])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date.toISOString()])
 
-  const statusOptions: { value: WorkDayStatus; label: string }[] = [
-    { value: 'WORKING',    label: t('me.statusWorking') },
-    { value: 'WEEKEND',    label: t('me.statusWeekend') },
-    { value: 'SICK_LEAVE', label: t('me.statusSickLeave') },
-    { value: 'VACATION',   label: t('me.statusVacation') },
-  ]
-
   const handleSave = async () => {
-    await upsert.mutateAsync({
-      date: toKey(date.toISOString()),
-      status,
-      startTime: status === 'WORKING' && startTime ? startTime : undefined,
-      endTime:   status === 'WORKING' && endTime   ? endTime   : undefined,
-    })
+    await upsert.mutateAsync({ date: toKey(date.toISOString()), status })
     setEditing(false)
     if (!workDay) onClose()
   }
+
+  const handleClear = async () => {
+    await removeDay.mutateAsync(toKey(date.toISOString()))
+    onClose()
+  }
+
+  const busy = upsert.isPending || removeDay.isPending
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -316,7 +232,6 @@ function DayModal({ open, onClose, date, workDay, tasksOnDay, defaults }: DayMod
 
         {editing ? (
           <div className="flex flex-col gap-4">
-            {/* Status select */}
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">{t('me.dayStatus')}</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as WorkDayStatus)}>
@@ -324,45 +239,29 @@ function DayModal({ open, onClose, date, workDay, tasksOnDay, defaults }: DayMod
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {statusOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  {STATUS_ORDER.map((s) => (
+                    <SelectItem key={s} value={s}>{t(STATUS_LABEL_KEY[s])}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Time inputs — only WORKING */}
-            {status === 'WORKING' && (
-              <div className="flex gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs">{t('me.workStart')}</Label>
-                  <TimePicker
-                    value={startTime}
-                    onChange={(v) => {
-                      setStartTime(v)
-                      // Clear end time if it's no longer after start
-                      if (endTime && v && endTime <= v) setEndTime('')
-                    }}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs">{t('me.workEnd')}</Label>
-                  <TimePicker
-                    value={endTime}
-                    onChange={setEndTime}
-                    minTime={startTime || undefined}
-                  />
-                </div>
-              </div>
-            )}
-
             <div className="flex justify-end gap-2">
+              {workDay && (
+                <Button
+                  variant="outline" size="sm" className="mr-auto gap-1.5"
+                  onClick={handleClear} disabled={busy}
+                >
+                  <X className="size-3.5" />
+                  {t('me.clearStatus')}
+                </Button>
+              )}
               {workDay && (
                 <Button variant="outline" size="sm" onClick={() => setEditing(false)}>
                   {t('dashboard.team.cancel')}
                 </Button>
               )}
-              <Button size="sm" onClick={handleSave} disabled={upsert.isPending}>
+              <Button size="sm" onClick={handleSave} disabled={busy}>
                 {upsert.isPending
                   ? <Loader2 className="size-3.5 animate-spin" />
                   : t('me.save')}
@@ -370,40 +269,10 @@ function DayModal({ open, onClose, date, workDay, tasksOnDay, defaults }: DayMod
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            {/* Status + time */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[workDay!.status]}`}>
-                {statusOptions.find((o) => o.value === workDay!.status)?.label}
-              </span>
-              {workDay!.startTime && workDay!.endTime && (
-                <span className="text-sm text-muted-foreground">
-                  {workDay!.startTime.slice(0, 5)} – {workDay!.endTime.slice(0, 5)}
-                </span>
-              )}
-            </div>
-
-            {/* Completed tasks */}
-            {tasksOnDay.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs font-medium text-muted-foreground">{t('me.completedOnDay')}</p>
-                <div className="flex flex-col gap-1.5 max-h-52 overflow-y-auto">
-                  {tasksOnDay.map((task) => (
-                    <div key={task.id} className="flex items-center gap-2 rounded-md border border-border p-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate">{task.title}</p>
-                        <p className="text-xs text-muted-foreground">{task.board.title}</p>
-                      </div>
-                      <span className={`shrink-0 text-xs font-medium ${PRIORITY_COLOR[task.priority]}`}>
-                        {task.priority}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : workDay!.status === 'WORKING' ? (
-              <p className="text-sm text-muted-foreground">{t('schedule.noTasksOnDay')}</p>
-            ) : null}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[workDay!.status]}`}>
+              {t(STATUS_LABEL_KEY[workDay!.status])}
+            </span>
           </div>
         )}
       </DialogContent>
@@ -602,23 +471,9 @@ function usePinchZoom(
 
 interface ViewProps {
   maps: DayMaps
-  defaults: Record<number, WorkDayStatus>
   todayKey: string
   locale: string
   onSelectDay: (d: Date) => void
-}
-
-/** Resolve a day's status and whether it is confirmed or merely inferred. */
-function resolveDay(date: Date, maps: DayMaps, defaults: Record<number, WorkDayStatus>) {
-  const key = toKey(date.toISOString())
-  const workDay = maps.workDayMap.get(key)
-  return {
-    key,
-    workDay,
-    tasks: maps.tasksByDay.get(key) ?? [],
-    status: workDay?.status ?? defaults[dowIndex(date)],
-    confirmed: Boolean(workDay),
-  }
 }
 
 // ── Year view ─────────────────────────────────────────────────────────────────
@@ -657,7 +512,7 @@ const GUTTER_W = 46
 const HEADER_H = 18
 
 function YearView({
-  year, maps, defaults, todayKey, locale, onSelectDay,
+  year, maps, todayKey, locale, onSelectDay,
 }: ViewProps & { year: number }) {
   const [wrapRef, { w, h }] = useElementSize<HTMLDivElement>()
 
@@ -738,7 +593,7 @@ function YearView({
                   }
 
                   const date = utcDay(year, month, day)
-                  const { key, status, confirmed } = resolveDay(date, maps, defaults)
+                  const { key, status, confirmed } = resolveDay(date, maps)
                   const isToday = key === todayKey
 
                   return (
@@ -753,7 +608,7 @@ function YearView({
                         'rounded-[22%] transition-transform hover:scale-125',
                         isToday
                           ? 'bg-primary ring-2 ring-primary/40'
-                          : confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
+                          : confirmed ? STATUS_SOLID[status!] : NEUTRAL_DOT,
                       ].join(' ')}
                     />
                   )
@@ -770,7 +625,7 @@ function YearView({
 // ── Month view ────────────────────────────────────────────────────────────────
 
 function MonthView({
-  year, month, maps, defaults, todayKey, locale, onSelectDay,
+  year, month, maps, todayKey, locale, onSelectDay,
 }: ViewProps & { year: number; month: number }) {
   const total = daysInMonthOf(year, month)
   const startDow = dowIndex(utcDay(year, month, 1))
@@ -798,7 +653,7 @@ function MonthView({
 
         {Array.from({ length: total }, (_, i) => i + 1).map((day) => {
           const date = utcDay(year, month, day)
-          const { key, workDay, tasks, status, confirmed } = resolveDay(date, maps, defaults)
+          const { key, status, confirmed } = resolveDay(date, maps)
           const isToday = key === todayKey
 
           return (
@@ -807,25 +662,13 @@ function MonthView({
               onClick={() => onSelectDay(date)}
               className={[
                 'flex flex-col items-center justify-center gap-1 rounded-lg text-xs transition-colors',
-                confirmed ? STATUS_BG[status] : STATUS_BG_DIM[status],
+                confirmed ? STATUS_BG[status!] : 'hover:bg-muted/50',
                 isToday ? 'ring-1 ring-primary' : 'hover:ring-1 hover:ring-border',
               ].join(' ')}
             >
               <span className={`text-base font-semibold leading-none ${isToday ? 'text-primary' : ''}`}>
                 {day}
               </span>
-              {workDay?.startTime && workDay?.endTime && (
-                <span className="text-[10px] leading-none opacity-60">
-                  {workDay.startTime.slice(0, 5)}–{workDay.endTime.slice(0, 5)}
-                </span>
-              )}
-              {tasks.length > 0 && (
-                <div className="flex gap-0.5">
-                  {tasks.slice(0, 3).map((task) => (
-                    <div key={task.id} className="size-1.5 rounded-full bg-emerald-500" />
-                  ))}
-                </div>
-              )}
             </button>
           )
         })}
@@ -836,174 +679,57 @@ function MonthView({
 
 // ── Week view ─────────────────────────────────────────────────────────────────
 //
-// A time grid, not seven tall empty cards: hour rows down the left, the working
-// window drawn as a block in each day column. This is what gives the zoomed-in
-// level something to actually show.
-
-const GUTTER = '3.25rem'
-const DAY_START_FALLBACK = 8
-const DAY_END_FALLBACK = 19
+// A simple day-by-day agenda list. This used to be an hour-by-hour time grid
+// built around WorkDay.startTime/endTime, but the backend dropped those
+// fields in the work-day status rework — there's no per-day time range to
+// plot anymore, only an exception status. Rebuild as a time grid once
+// WorkTimeEntry (server/prisma/schema.prisma) has a real endpoint behind it.
 
 function WeekView({
-  weekStart, maps, defaults, todayKey, locale, onSelectDay,
+  weekStart, maps, todayKey, locale, onSelectDay,
 }: ViewProps & { weekStart: Date }) {
   const { t } = useTranslation()
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
-  const resolved = days.map((d) => ({ date: d, ...resolveDay(d, maps, defaults) }))
-
-  // Widen the visible hour range to cover whatever the week actually contains.
-  let from = DAY_START_FALLBACK
-  let to = DAY_END_FALLBACK
-  for (const r of resolved) {
-    if (r.workDay?.startTime) from = Math.min(from, Math.floor(timeToHours(r.workDay.startTime)))
-    if (r.workDay?.endTime)   to   = Math.max(to,   Math.ceil(timeToHours(r.workDay.endTime)))
-  }
-  from = clamp(from, 0, 23)
-  to = clamp(Math.max(to, from + 1), 1, 24)
-
-  const hours = Array.from({ length: to - from }, (_, i) => from + i)
-  const gridTemplateColumns = `${GUTTER} repeat(7, minmax(0, 1fr))`
+  const resolved = days.map((d) => ({ date: d, ...resolveDay(d, maps) }))
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Day headers — pinned above the scrolling time grid */}
-      <div className="grid shrink-0 pb-1.5" style={{ gridTemplateColumns }}>
-        <div />
-        {resolved.map(({ date, key, status, confirmed }) => {
-          const isToday = key === todayKey
-          return (
-            <button
-              key={key}
-              onClick={() => onSelectDay(date)}
-              className="mx-0.5 flex flex-col items-center rounded-lg py-1 transition-colors hover:bg-muted/50"
-            >
-              <span className="text-[11px] font-medium capitalize text-muted-foreground">
-                {getDowLabel(dowIndex(date), locale, 'short')}
-              </span>
+    <div className="flex h-full flex-col gap-1.5 overflow-y-auto py-1">
+      {resolved.map(({ date, key, status, confirmed }) => {
+        const isToday = key === todayKey
+
+        return (
+          <button
+            key={key}
+            onClick={() => onSelectDay(date)}
+            className={[
+              'flex shrink-0 items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-colors',
+              confirmed ? STATUS_BG[status!] : 'hover:bg-muted/50',
+              isToday ? 'border-primary ring-1 ring-primary' : 'border-border',
+            ].join(' ')}
+          >
+            <div className="flex items-center gap-3">
               <span
                 className={[
-                  'mt-0.5 flex size-7 items-center justify-center rounded-full text-sm font-semibold',
-                  isToday ? 'bg-primary text-primary-foreground' : '',
+                  'flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold',
+                  isToday ? 'bg-primary text-primary-foreground' : 'bg-muted',
                 ].join(' ')}
               >
                 {date.getUTCDate()}
               </span>
-              {/* status pip, so non-working days still read at a glance */}
-              <span
-                className={[
-                  'mt-1 h-1 w-4 rounded-full',
-                  confirmed ? STATUS_SOLID[status] : STATUS_DOT_DIM[status],
-                ].join(' ')}
-              />
-            </button>
-          )
-        })}
-      </div>
-
-      {/* The grid fills the available height rather than scrolling, so a whole
-          day is always visible and nothing gets clipped at the fold. Everything
-          inside is positioned as a percentage of the hour range.
-          pt-2/pb-2 give the first and last hour labels room — they sit on their
-          rule, vertically centred, so half hangs outside the grid. */}
-      <div className="min-h-0 flex-1 py-2">
-        <div
-          className="relative grid h-full"
-          style={{ gridTemplateColumns }}
-        >
-          {/* Hour labels */}
-          <div className="relative">
-            {hours.map((h, i) => (
-              <span
-                key={h}
-                className="absolute right-2 -translate-y-1/2 text-[10px] tabular-nums text-muted-foreground"
-                style={{ top: `${(i / hours.length) * 100}%` }}
-              >
-                {String(h).padStart(2, '0')}:00
+              <span className="text-sm font-medium capitalize text-muted-foreground">
+                {getDowLabel(dowIndex(date), locale, 'short')}
               </span>
-            ))}
-          </div>
-
-          {/* Day columns */}
-          {resolved.map(({ date, key, workDay, tasks, status, confirmed }) => {
-            const isToday = key === todayKey
-            const start = workDay?.startTime ? timeToHours(workDay.startTime) : null
-            const end = workDay?.endTime ? timeToHours(workDay.endTime) : null
-            const hasBlock = start != null && end != null && end > start
-
-            return (
-              <button
-                key={key}
-                onClick={() => onSelectDay(date)}
-                className={[
-                  'relative mx-0.5 rounded-lg border-l border-border/40 text-left transition-colors',
-                  // Tint every column, confirmed or merely inferred, so a
-                  // weekend still reads as a weekend in the time grid.
-                  STATUS_BG_DIM[status],
-                  // ring-inset draws the ring inside the column's own box, so
-                  // it can't be clipped by the grid edge the way an outset ring
-                  // was. ring-2 makes it read at a glance.
-                  isToday ? 'ring-2 ring-inset ring-primary' : '',
-                ].join(' ')}
-              >
-                {/* Hour rules */}
-                {hours.map((h, i) => (
-                  <span
-                    key={h}
-                    className="absolute inset-x-0 border-t border-border/25"
-                    style={{ top: `${(i / hours.length) * 100}%` }}
-                  />
-                ))}
-
-                {/* Working window */}
-                {hasBlock && (
-                  <div
-                    className={[
-                      'absolute inset-x-1 flex flex-col gap-1 overflow-hidden rounded-lg p-1.5',
-                      STATUS_BG[status],
-                    ].join(' ')}
-                    style={{
-                      top: `${((start! - from) / hours.length) * 100}%`,
-                      height: `${((end! - start!) / hours.length) * 100}%`,
-                      minHeight: 22,
-                    }}
-                  >
-                    <span className="shrink-0 text-[10px] font-medium tabular-nums opacity-70">
-                      {workDay!.startTime!.slice(0, 5)}–{workDay!.endTime!.slice(0, 5)}
-                    </span>
-                    {tasks.map((task) => (
-                      <span
-                        key={task.id}
-                        className="line-clamp-2 shrink-0 rounded bg-background/60 px-1.5 py-0.5 text-[10px] leading-tight"
-                      >
-                        {task.title}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* No working window — surface the status and any tasks instead */}
-                {!hasBlock && (
-                  <div className="absolute inset-x-1 top-1 flex flex-col gap-1">
-                    {confirmed && (
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE[status]}`}>
-                        {t(`me.status${status === 'SICK_LEAVE' ? 'SickLeave' : capitalize(status.toLowerCase())}`)}
-                      </span>
-                    )}
-                    {tasks.map((task) => (
-                      <span
-                        key={task.id}
-                        className="line-clamp-2 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] leading-tight"
-                      >
-                        {task.title}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+            </div>
+            {confirmed ? (
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[status!]}`}>
+                {t(STATUS_LABEL_KEY[status!])}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">{t('me.statusWorking')}</span>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -1011,9 +737,8 @@ function WeekView({
 // ── Zoomable calendar ─────────────────────────────────────────────────────────
 
 function ZoomCalendar({
-  userId, anchor, setAnchor,
+  anchor, setAnchor,
 }: {
-  userId: number
   anchor: Date
   setAnchor: React.Dispatch<React.SetStateAction<Date>>
 }) {
@@ -1039,8 +764,6 @@ function ZoomCalendar({
   const yearQ = useYearData(year)
   const nextYearQ = useYearData(weekEndYear, weekEndYear !== year)
 
-  // localStorage + JSON.parse per day would be ~365 reads in the year view.
-  const defaults = useMemo(() => getWeeklyDefaults(userId), [userId])
   const maps = useMemo(
     () => buildDayMaps([yearQ.data, nextYearQ.data]),
     [yearQ.data, nextYearQ.data],
@@ -1071,9 +794,8 @@ function ZoomCalendar({
 
   const selKey     = selectedDate ? toKey(selectedDate.toISOString()) : null
   const selWorkDay = selKey ? maps.workDayMap.get(selKey) : undefined
-  const selTasks   = selKey ? (maps.tasksByDay.get(selKey) ?? []) : []
 
-  const viewProps = { maps, defaults, todayKey, locale, onSelectDay: setSelectedDate }
+  const viewProps = { maps, todayKey, locale, onSelectDay: setSelectedDate }
 
   return (
     <>
@@ -1145,15 +867,10 @@ function ZoomCalendar({
 
           {/* Legend */}
           <div className="mt-3 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3">
-            {([
-              ['bg-blue-500',    t('me.statusWorking')],
-              ['bg-amber-400',   t('me.statusWeekend')],
-              ['bg-rose-500',    t('me.statusSickLeave')],
-              ['bg-emerald-500', t('me.statusVacation')],
-            ] as [string, string][]).map(([cls, label]) => (
-              <span key={label} className="flex items-center gap-1.5">
-                <span className={`inline-block size-2.5 rounded-[22%] ${cls}`} />
-                <span className="text-[11px] text-muted-foreground">{label}</span>
+            {STATUS_ORDER.map((s) => (
+              <span key={s} className="flex items-center gap-1.5">
+                <span className={`inline-block size-2.5 rounded-[22%] ${STATUS_SOLID[s]}`} />
+                <span className="text-[11px] text-muted-foreground">{t(STATUS_LABEL_KEY[s])}</span>
               </span>
             ))}
             <span className="ml-auto hidden text-[11px] text-muted-foreground sm:inline">
@@ -1169,64 +886,38 @@ function ZoomCalendar({
           onClose={() => setSelectedDate(null)}
           date={selectedDate}
           workDay={selWorkDay}
-          tasksOnDay={selTasks}
-          defaults={defaults}
         />
       )}
     </>
   )
 }
 
-// ── Stats cards ───────────────────────────────────────────────────────────────
+// ── Stats card ────────────────────────────────────────────────────────────────
 
-function StatsCards({ stats }: {
-  stats?: { workingDays: number; totalHours: number }
-}) {
+function StatsCard({ daysOff }: { daysOff?: number }) {
   const { t } = useTranslation()
 
-  const cards = [
-    { label: t('me.workingDays'),    value: stats?.workingDays ?? '—' },
-    {
-      label: t('me.hoursThisMonth'),
-      value: stats?.totalHours != null ? `${stats.totalHours}${t('schedule.hoursUnit')}` : '—',
-    },
-  ]
-
   return (
-    <div className="grid shrink-0 grid-cols-2 gap-3">
-      {cards.map((c) => (
-        <Card key={c.label}>
-          <CardContent className="pb-4 pt-4">
-            <p className="text-xs text-muted-foreground">{c.label}</p>
-            <p className="mt-1 text-2xl font-semibold">{c.value}</p>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <Card className="shrink-0">
+      <CardContent className="pb-4 pt-4">
+        <p className="text-xs text-muted-foreground">{t('me.daysOffThisMonth')}</p>
+        <p className="mt-1 text-2xl font-semibold">{daysOff ?? '—'}</p>
+      </CardContent>
+    </Card>
   )
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 function SchedulePage() {
-  // Anchor lives here so the stats cards track the month being viewed.
+  // Anchor lives here so the stats card tracks the month being viewed.
   const [anchor, setAnchor] = useState(todayUTC)
-
-  const { data: me, isLoading } = useMe()
   const { data: monthData } = useMonthData(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1)
-
-  if (isLoading) {
-    return (
-      <main className="flex items-center justify-center p-12">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </main>
-    )
-  }
 
   return (
     <main className="flex h-[calc(100vh-56px)] flex-col gap-4 p-6">
-      <StatsCards stats={monthData?.stats} />
-      <ZoomCalendar userId={me?.id ?? 0} anchor={anchor} setAnchor={setAnchor} />
+      <StatsCard daysOff={monthData?.stats.daysOff} />
+      <ZoomCalendar anchor={anchor} setAnchor={setAnchor} />
     </main>
   )
 }

@@ -196,80 +196,90 @@ function SettingsPage() {
         </form>
       </Card>
 
-      {/* Weekly schedule defaults */}
-      {me && <WeeklyScheduleCard userId={me.id} />}
+      {/* Weekly schedule defaults — disabled pending rework, see note below. */}
+      {/* {me && <WeeklyScheduleCard userId={me.id} />} */}
     </main>
   )
 }
 
 // ── WeeklyScheduleCard ────────────────────────────────────────────────────────
-
-type WorkDayStatus = 'WORKING' | 'WEEKEND' | 'SICK_LEAVE' | 'VACATION'
-
-const DEFAULT_SCHEDULE: Record<number, WorkDayStatus> = {
-  0: 'WORKING', 1: 'WORKING', 2: 'WORKING', 3: 'WORKING', 4: 'WORKING',
-  5: 'WEEKEND', 6: 'WEEKEND',
-}
-
-function getDayName(idx: number, locale: string) {
-  // April 13, 2026 is a Monday — use as reference
-  return new Date(Date.UTC(2026, 3, 13 + idx)).toLocaleDateString(locale, { weekday: 'long' })
-}
-
-function WeeklyScheduleCard({ userId }: { userId: number }) {
-  const { t, i18n } = useTranslation()
-  const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-US'
-  const storageKey = `weeklySchedule_${userId}`
-
-  const [schedule, setSchedule] = useState<Record<number, WorkDayStatus>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(storageKey) ?? 'null') ?? DEFAULT_SCHEDULE
-    } catch { return DEFAULT_SCHEDULE }
-  })
-
-  const update = (idx: number, status: WorkDayStatus) => {
-    const next = { ...schedule, [idx]: status }
-    setSchedule(next)
-    localStorage.setItem(storageKey, JSON.stringify(next))
-  }
-
-  const statusOptions: { value: WorkDayStatus; label: string }[] = [
-    { value: 'WORKING',    label: t('me.statusWorking') },
-    { value: 'WEEKEND',    label: t('me.statusWeekend') },
-    { value: 'SICK_LEAVE', label: t('me.statusSickLeave') },
-    { value: 'VACATION',   label: t('me.statusVacation') },
-  ]
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {t('dashboard.settings.weeklySchedule')}
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">{t('dashboard.settings.weeklyScheduleDesc')}</p>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {Array.from({ length: 7 }, (_, i) => (
-          <div key={i} className="flex items-center justify-between gap-4">
-            <span className="text-sm capitalize w-28 shrink-0">
-              {getDayName(i, locale)}
-            </span>
-            <Select
-              value={schedule[i] ?? DEFAULT_SCHEDULE[i]}
-              onValueChange={(v) => update(i, v as WorkDayStatus)}
-            >
-              <SelectTrigger className="h-8 text-sm flex-1 max-w-50">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {statusOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  )
-}
+//
+// Let a user set a default status per weekday (e.g. weekends off), stored in
+// localStorage and read back by the schedule page to color in unmarked days.
+// It predates the work-day status rework: WorkDayStatus went from 4 values
+// (WORKING/WEEKEND/SICK_LEAVE/VACATION) to 6, and weekend/sick-leave each
+// split into paid/unpaid variants with no obvious default. Commented out
+// rather than ported blind — re-enable once there's a real answer for which
+// variant a "weekend" default should pick.
+//
+// import type { WorkDayStatus } from '#/lib/workdays/types'
+//
+// const DEFAULT_SCHEDULE: Record<number, WorkDayStatus> = {
+//   0: 'WEEKEND_PAID', 1: 'WEEKEND_PAID', 2: 'WEEKEND_PAID', 3: 'WEEKEND_PAID', 4: 'WEEKEND_PAID',
+//   5: 'WEEKEND_PAID', 6: 'WEEKEND_PAID',
+// }
+//
+// function getDayName(idx: number, locale: string) {
+//   // April 13, 2026 is a Monday — use as reference
+//   return new Date(Date.UTC(2026, 3, 13 + idx)).toLocaleDateString(locale, { weekday: 'long' })
+// }
+//
+// function WeeklyScheduleCard({ userId }: { userId: number }) {
+//   const { t, i18n } = useTranslation()
+//   const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-US'
+//   const storageKey = `weeklySchedule_${userId}`
+//
+//   const [schedule, setSchedule] = useState<Record<number, WorkDayStatus>>(() => {
+//     try {
+//       return JSON.parse(localStorage.getItem(storageKey) ?? 'null') ?? DEFAULT_SCHEDULE
+//     } catch { return DEFAULT_SCHEDULE }
+//   })
+//
+//   const update = (idx: number, status: WorkDayStatus) => {
+//     const next = { ...schedule, [idx]: status }
+//     setSchedule(next)
+//     localStorage.setItem(storageKey, JSON.stringify(next))
+//   }
+//
+//   const statusOptions: { value: WorkDayStatus; label: string }[] = [
+//     { value: 'WEEKEND_PAID',      label: t('me.statusWeekendPaid') },
+//     { value: 'WEEKEND_UNPAID',    label: t('me.statusWeekendUnpaid') },
+//     { value: 'SICK_LEAVE_PAID',   label: t('me.statusSickLeavePaid') },
+//     { value: 'SICK_LEAVE_UNPAID', label: t('me.statusSickLeaveUnpaid') },
+//     { value: 'VACATION',          label: t('me.statusVacation') },
+//     { value: 'HOLIDAY',           label: t('me.statusHoliday') },
+//   ]
+//
+//   return (
+//     <Card>
+//       <CardHeader className="pb-2">
+//         <CardTitle className="text-sm font-medium text-muted-foreground">
+//           {t('dashboard.settings.weeklySchedule')}
+//         </CardTitle>
+//         <p className="text-xs text-muted-foreground">{t('dashboard.settings.weeklyScheduleDesc')}</p>
+//       </CardHeader>
+//       <CardContent className="flex flex-col gap-2">
+//         {Array.from({ length: 7 }, (_, i) => (
+//           <div key={i} className="flex items-center justify-between gap-4">
+//             <span className="text-sm capitalize w-28 shrink-0">
+//               {getDayName(i, locale)}
+//             </span>
+//             <Select
+//               value={schedule[i] ?? DEFAULT_SCHEDULE[i]}
+//               onValueChange={(v) => update(i, v as WorkDayStatus)}
+//             >
+//               <SelectTrigger className="h-8 text-sm flex-1 max-w-50">
+//                 <SelectValue />
+//               </SelectTrigger>
+//               <SelectContent>
+//                 {statusOptions.map((o) => (
+//                   <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+//                 ))}
+//               </SelectContent>
+//             </Select>
+//           </div>
+//         ))}
+//       </CardContent>
+//     </Card>
+//   )
+// }

@@ -36,3 +36,11 @@ export function useUpsertWorkDay() {
     onSuccess: () => qc.invalidateQueries({ queryKey: WORK_DAYS_ROOT }),
   })
 }
+
+export function useRemoveWorkDay() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (date: string) => workDaysApi.removeDay(date),
+    onSuccess: () => qc.invalidateQueries({ queryKey: WORK_DAYS_ROOT }),
+  })
+}

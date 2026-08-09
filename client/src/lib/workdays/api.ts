@@ -8,4 +8,7 @@ export const workDaysApi = {
   getYear: (year: number) => api.get<MonthData>(`/work-days?year=${year}`),
   upsertDay: (date: string, body: UpsertWorkDayRequest) =>
     api.put<WorkDay>(`/work-days/${date}`, body),
+  /** Clears an exception, reverting the date to a regular working day. */
+  removeDay: (date: string) =>
+    api.delete<{ deleted: boolean }>(`/work-days/${date}`),
 }

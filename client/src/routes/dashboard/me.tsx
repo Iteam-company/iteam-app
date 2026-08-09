@@ -50,6 +50,15 @@ function MePage() {
   const activeTasks   = myTasks.filter((task) => task.status !== 'DONE')
   const workingOnTask = myTasks.find((task) => task.id === me?.workingOnTaskId)
 
+  // The work-days endpoint no longer reports task completion counts (that
+  // coupling was removed in the work-day status rework) — derive it from the
+  // tasks we already have instead of adding a new backend dependency.
+  const completedThisMonth = myTasks.filter((task) => {
+    if (task.status !== 'DONE') return false
+    const d = new Date(task.updatedAt)
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  }).length
+
   const handleSaveStatus = async () => {
     await updateStatus.mutateAsync({
       workingOnTaskId: workingTaskId !== 'none' ? Number(workingTaskId) : null,
@@ -86,12 +95,11 @@ function MePage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
-          { label: t('me.completedThisMonth'), value: monthData?.stats.completedCount ?? '—' },
+          { label: t('me.completedThisMonth'), value: completedThisMonth },
           { label: t('me.salaryLabel'),        value: me?.salary != null ? `${Number(me.salary).toLocaleString('uk-UA')} ₴` : '—' },
-          { label: t('me.workingDays'),        value: monthData?.stats.workingDays ?? '—' },
-          { label: t('me.hoursThisMonth'),     value: monthData?.stats.totalHours != null ? `${monthData.stats.totalHours}${t('schedule.hoursUnit')}` : '—' },
+          { label: t('me.daysOffThisMonth'),   value: monthData?.stats.daysOff ?? '—' },
         ].map((c) => (
           <Card key={c.label}>
             <CardContent className="pb-4 pt-4">
