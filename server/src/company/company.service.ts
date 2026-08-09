@@ -1,29 +1,25 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
+import { CompanyAccessService } from './company-access.service';
 import {
-  BulkCreateRolesDto,
   CreateCompanyDto,
-  CreateRoleDto,
-  GetMembersQueryDto,
   InviteUsersDto,
   SendMessageDto,
   UpdateCompanyDto,
   UpdateCompanySettingsDto,
-  UpdateMemberOccupationDto,
-  UpdateMemberRoleDto,
-  UpdateMemberSalaryDto,
-} from './dto/company.dto';
-import { paginate } from '../common/paginate';
+} from './dto';
 
 @Injectable()
 export class CompanyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   // ── Create ────────────────────────────────────────────────────────────────
 
@@ -67,14 +63,14 @@ export class CompanyService {
   // ── Update ────────────────────────────────────────────────────────────────
 
   async update(userId: number, dto: UpdateCompanyDto) {
-    const companyId = await this.requireCompany(userId);
+    const companyId = await this.companyAccess.requireCompany(userId);
     return this.prisma.company.update({ where: { id: companyId }, data: dto });
   }
 
   // ── Settings ──────────────────────────────────────────────────────────────
 
   async getSettings(userId: number) {
-    const companyId = await this.requireCompany(userId);
+    const companyId = await this.companyAccess.requireCompany(userId);
     const settings = await this.prisma.companySettings.findUnique({
       where: { companyId },
     });
@@ -91,7 +87,7 @@ export class CompanyService {
   }
 
   async updateSettings(userId: number, dto: UpdateCompanySettingsDto) {
-    const companyId = await this.requireAdmin(userId);
+    const companyId = await this.companyAccess.requireAdmin(userId);
     return this.prisma.companySettings.upsert({
       where: { companyId },
       update: dto,
@@ -99,166 +95,10 @@ export class CompanyService {
     });
   }
 
-  // ── Roles ─────────────────────────────────────────────────────────────────
-
-  async getRoles(userId: number) {
-    const companyId = await this.requireCompany(userId);
-    return this.prisma.companyRole.findMany({
-      where: { companyId },
-      orderBy: { name: 'asc' },
-    });
-  }
-
-  async addRole(userId: number, dto: CreateRoleDto) {
-    const companyId = await this.requireCompany(userId);
-    return this.prisma.companyRole.upsert({
-      where: { name_companyId: { name: dto.name, companyId } },
-      update: {},
-      create: { name: dto.name, companyId },
-    });
-  }
-
-  async bulkCreateRoles(userId: number, dto: BulkCreateRolesDto) {
-    const companyId = await this.requireCompany(userId);
-    const results = await Promise.all(
-      dto.names.map((name) =>
-        this.prisma.companyRole.upsert({
-          where: { name_companyId: { name, companyId } },
-          update: {},
-          create: { name, companyId },
-        }),
-      ),
-    );
-    return results;
-  }
-
-  async deleteRole(userId: number, roleId: number) {
-    const companyId = await this.requireCompany(userId);
-    const role = await this.prisma.companyRole.findFirst({
-      where: { id: roleId, companyId },
-    });
-    if (!role) throw new NotFoundException('Role not found');
-    await this.prisma.companyRole.delete({ where: { id: roleId } });
-    return { deleted: true };
-  }
-
-  // ── Members ───────────────────────────────────────────────────────────────
-
-  async getMembers(userId: number, query: GetMembersQueryDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.companyId)
-      throw new ForbiddenException('User does not belong to a company');
-    const { companyId } = user;
-    const isAdmin = user.role === 'ADMIN';
-
-    const search = query.search?.trim();
-    const where = {
-      companyId,
-      ...(query.role ? { role: query.role } : {}),
-      ...(query.occupation ? { occupation: query.occupation } : {}),
-      ...(search
-        ? {
-            OR: [
-              { fullName: { contains: search, mode: 'insensitive' as const } },
-              { email: { contains: search, mode: 'insensitive' as const } },
-              {
-                occupation: { contains: search, mode: 'insensitive' as const },
-              },
-            ],
-          }
-        : {}),
-    };
-
-    const select = {
-      id: true,
-      email: true,
-      fullName: true,
-      phone: true,
-      occupation: true,
-      role: true,
-      createdAt: true,
-      ...(isAdmin ? { salary: true } : {}),
-    };
-    return paginate(this.prisma.user, query, {
-      where,
-      select,
-      orderBy: { fullName: 'asc' },
-    });
-  }
-
-  async updateMemberSalary(
-    userId: number,
-    memberId: number,
-    dto: UpdateMemberSalaryDto,
-  ) {
-    const companyId = await this.requireAdmin(userId);
-    const member = await this.prisma.user.findFirst({
-      where: { id: memberId, companyId },
-    });
-    if (!member) throw new NotFoundException('Member not found');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (this.prisma.user as any).update({
-      where: { id: memberId },
-      data: { salary: dto.salary ?? null },
-      select: { id: true, salary: true },
-    });
-  }
-
-  async updateMemberRole(
-    userId: number,
-    memberId: number,
-    dto: UpdateMemberRoleDto,
-  ) {
-    const companyId = await this.requireAdmin(userId);
-    const member = await this.prisma.user.findFirst({
-      where: { id: memberId, companyId },
-    });
-    if (!member) throw new NotFoundException('Member not found');
-    if (memberId === userId)
-      throw new BadRequestException('Cannot change your own role');
-    return this.prisma.user.update({
-      where: { id: memberId },
-      data: { role: dto.role },
-      select: { id: true, email: true, fullName: true, role: true },
-    });
-  }
-
-  async updateMemberOccupation(
-    userId: number,
-    memberId: number,
-    dto: UpdateMemberOccupationDto,
-  ) {
-    const companyId = await this.requireAdmin(userId);
-    const member = await this.prisma.user.findFirst({
-      where: { id: memberId, companyId },
-    });
-    if (!member) throw new NotFoundException('Member not found');
-    return this.prisma.user.update({
-      where: { id: memberId },
-      data: { occupation: dto.occupation },
-      select: { id: true, email: true, fullName: true, occupation: true },
-    });
-  }
-
-  async removeMember(userId: number, memberId: number) {
-    const companyId = await this.requireAdmin(userId);
-    if (memberId === userId)
-      throw new BadRequestException('Cannot remove yourself from the company');
-    const member = await this.prisma.user.findFirst({
-      where: { id: memberId, companyId },
-    });
-    if (!member) throw new NotFoundException('Member not found');
-    await this.prisma.user.update({
-      where: { id: memberId },
-      data: { companyId: null, role: 'USER' },
-    });
-    return { removed: true };
-  }
-
   // ── Invite ────────────────────────────────────────────────────────────────
 
   async inviteUsers(userId: number, dto: InviteUsersDto) {
-    const companyId = await this.requireCompany(userId);
+    const companyId = await this.companyAccess.requireCompany(userId);
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       include: { settings: true },
@@ -322,7 +162,7 @@ export class CompanyService {
   // ── Send message ─────────────────────────────────────────────────────────
 
   async sendMessage(userId: number, dto: SendMessageDto) {
-    const companyId = await this.requireAdmin(userId);
+    const companyId = await this.companyAccess.requireAdmin(userId);
 
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
@@ -383,23 +223,5 @@ export class CompanyService {
       total: recipients.length,
       errors: failures.map((f) => String(f.reason?.message ?? f.reason)),
     };
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  private async requireCompany(userId: number): Promise<number> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.companyId)
-      throw new ForbiddenException('User does not belong to a company');
-    return user.companyId;
-  }
-
-  private async requireAdmin(userId: number): Promise<number> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.companyId)
-      throw new ForbiddenException('User does not belong to a company');
-    if (user.role !== 'ADMIN')
-      throw new ForbiddenException('Only admins can manage company settings');
-    return user.companyId;
   }
 }
