@@ -101,24 +101,11 @@
       "me": "My Page",
       "schedule": "Schedule"
     },
-    "status": {
-      "online": "Online",
-      "noPower": "No power",
-      "shelter": "Shelter"
-    },
     "command": {
       "totalWorkers": "Total workers",
       "activeTeam": "Active team members",
-      "resiliency": "Resiliency",
-      "withPower": "with power",
-      "alerts": "Alerts",
-      "needAttention": "Need your attention",
       "teamGrid": "Team vitality",
-      "operationalAlerts": "Operational alerts",
-      "connectivity": "Connectivity",
-      "alerts.contracts": "2 contracts awaiting signature",
-      "alerts.okr": "3 OKR key results below 40%",
-      "alerts.payouts": "Payouts due in 4 days"
+      "noMembers": "No team members yet"
     },
     "okr": {
       "goalTree": "Goal tree",

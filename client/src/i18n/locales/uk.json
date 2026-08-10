@@ -101,24 +101,11 @@
       "me": "Моя сторінка",
       "schedule": "Розклад"
     },
-    "status": {
-      "online": "Онлайн",
-      "noPower": "Без світла",
-      "shelter": "В укритті"
-    },
     "command": {
       "totalWorkers": "Всього працівників",
       "activeTeam": "Активні члени команди",
-      "resiliency": "Стійкість",
-      "withPower": "зі світлом",
-      "alerts": "Сповіщення",
-      "needAttention": "Потребують уваги",
       "teamGrid": "Стан команди",
-      "operationalAlerts": "Операційні сповіщення",
-      "connectivity": "Підключення",
-      "alerts.contracts": "2 контракти очікують підпису",
-      "alerts.okr": "3 ключові результати OKR нижче 40%",
-      "alerts.payouts": "Виплати через 4 дні"
+      "noMembers": "Ще немає учасників команди"
     },
     "okr": {
       "goalTree": "Дерево цілей",
