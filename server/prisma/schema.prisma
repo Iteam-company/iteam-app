@@ -63,9 +63,23 @@ model User {
   notifications    Notification[]
   workDays         WorkDay[]
   workEntries      WorkTimeEntry[]
+  sessions         Session[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Session {
+  id        Int       @id @default(autoincrement())
+  tokenHash String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Company {

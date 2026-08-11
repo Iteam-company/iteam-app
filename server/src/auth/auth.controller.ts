@@ -19,6 +19,8 @@ import {
   ForgotPasswordDto,
   MeResponseDto,
   MessageResponseDto,
+  RefreshResponseDto,
+  RefreshTokenDto,
   ResetPasswordDto,
   SignInDto,
   SignUpDto,
@@ -39,10 +41,29 @@ export class AuthController {
   }
 
   @Post('sign-in')
-  @ApiOperation({ summary: 'Sign in and receive a JWT' })
+  @ApiOperation({
+    summary: 'Sign in and receive an access + refresh token pair',
+  })
   @ApiOkResponse({ type: AuthResponseDto })
   signIn(@Body() dto: SignInDto) {
     return this.authService.signIn(dto);
+  }
+
+  @Post('refresh')
+  @ApiOperation({
+    summary:
+      'Exchange a refresh token for a new access token (rotates the refresh token too)',
+  })
+  @ApiOkResponse({ type: RefreshResponseDto })
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto);
+  }
+
+  @Post('sign-out')
+  @ApiOperation({ summary: 'Revoke a refresh token, ending that session' })
+  @ApiOkResponse({ type: MessageResponseDto })
+  signOut(@Body() dto: RefreshTokenDto) {
+    return this.authService.signOut(dto);
   }
 
   @Post('forgot-password')

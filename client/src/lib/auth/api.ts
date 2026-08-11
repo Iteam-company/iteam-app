@@ -4,6 +4,8 @@ import type {
   ForgotPasswordRequest,
   MeResponse,
   MessageResponse,
+  RefreshResponse,
+  RefreshTokenRequest,
   ResetPasswordRequest,
   SignInRequest,
   SignUpRequest,
@@ -16,6 +18,12 @@ export const authApi = {
 
   signIn: (body: SignInRequest) =>
     api.post<AuthResponse>('/auth/sign-in', body),
+
+  refresh: (body: RefreshTokenRequest) =>
+    api.post<RefreshResponse>('/auth/refresh', body),
+
+  signOut: (body: RefreshTokenRequest) =>
+    api.post<MessageResponse>('/auth/sign-out', body),
 
   forgotPassword: (body: ForgotPasswordRequest) =>
     api.post<MessageResponse>('/auth/forgot-password', body),
@@ -30,14 +38,20 @@ export const authApi = {
 
 // ── Token helpers ─────────────────────────────────────────────────────────────
 
-export function saveToken(token: string) {
-  localStorage.setItem('accessToken', token)
+export function saveTokens(accessToken: string, refreshToken: string) {
+  localStorage.setItem('accessToken', accessToken)
+  localStorage.setItem('refreshToken', refreshToken)
 }
 
-export function clearToken() {
+export function clearTokens() {
   localStorage.removeItem('accessToken')
+  localStorage.removeItem('refreshToken')
 }
 
 export function getToken() {
   return localStorage.getItem('accessToken')
+}
+
+export function getRefreshToken() {
+  return localStorage.getItem('refreshToken')
 }

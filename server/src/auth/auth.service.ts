@@ -12,6 +12,8 @@ import {
   ForgotPasswordDto,
   MeResponseDto,
   MessageResponseDto,
+  RefreshResponseDto,
+  RefreshTokenDto,
   ResetPasswordDto,
   SignInDto,
   SignUpDto,
@@ -79,6 +81,29 @@ export class AuthService {
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     return this.buildTokenResponse(user.id, user.email);
+  }
+
+  // ── Refresh / Sign Out ────────────────────────────────────────────────────────
+
+  async refresh(dto: RefreshTokenDto): Promise<RefreshResponseDto> {
+    const { userId, refreshToken } = await this.tokens.rotateSession(
+      dto.refreshToken,
+    );
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('Invalid refresh token');
+
+    return {
+      accessToken: this.tokens.signAccessToken({
+        sub: user.id,
+        email: user.email,
+      }),
+      refreshToken,
+    };
+  }
+
+  async signOut(dto: RefreshTokenDto): Promise<MessageResponseDto> {
+    await this.tokens.revokeSession(dto.refreshToken);
+    return { message: 'Signed out' };
   }
 
   // ── Forgot Password ───────────────────────────────────────────────────────────
@@ -160,9 +185,14 @@ export class AuthService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
-  private buildTokenResponse(id: number, email: string): AuthResponseDto {
+  private async buildTokenResponse(
+    id: number,
+    email: string,
+  ): Promise<AuthResponseDto> {
+    const refreshToken = await this.tokens.createSession(id);
     return {
       accessToken: this.tokens.signAccessToken({ sub: id, email }),
+      refreshToken,
       user: { id, email },
     };
   }

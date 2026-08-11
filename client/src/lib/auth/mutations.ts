@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { authApi, saveToken } from './api'
+import { authApi, clearTokens, getRefreshToken, saveTokens } from './api'
 import type {
   ForgotPasswordRequest,
   ResetPasswordRequest,
@@ -30,14 +30,27 @@ export function useUpdateMe() {
 export function useSignUp() {
   return useMutation({
     mutationFn: (body: SignUpRequest) => authApi.signUp(body),
-    onSuccess: (data) => saveToken(data.accessToken),
+    onSuccess: (data) => saveTokens(data.accessToken, data.refreshToken),
   })
 }
 
 export function useSignIn() {
   return useMutation({
     mutationFn: (body: SignInRequest) => authApi.signIn(body),
-    onSuccess: (data) => saveToken(data.accessToken),
+    onSuccess: (data) => saveTokens(data.accessToken, data.refreshToken),
+  })
+}
+
+/** Best-effort server-side revoke, then always clear local tokens. */
+export function useSignOut() {
+  return useMutation({
+    mutationFn: () => {
+      const refreshToken = getRefreshToken()
+      return refreshToken
+        ? authApi.signOut({ refreshToken })
+        : Promise.resolve({ message: 'Signed out' })
+    },
+    onSettled: () => clearTokens(),
   })
 }
 

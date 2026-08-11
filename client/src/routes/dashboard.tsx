@@ -13,7 +13,7 @@ import {
 import { Separator } from '#/components/ui/separator'
 import { Button } from '#/components/ui/button'
 import { useMyCompany } from '#/lib/company/mutations'
-import { clearToken } from '#/lib/auth/api'
+import { useSignOut } from '#/lib/auth/mutations'
 import { useMarkAllRead, useMarkRead, useNotifications, useUnreadCount } from '#/lib/notifications/mutations'
 
 export const Route = createFileRoute('/dashboard')({
@@ -43,6 +43,7 @@ function DashboardLayout() {
   const navigate = useNavigate()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { data: company, isLoading } = useMyCompany()
+  const signOut = useSignOut()
 
   useEffect(() => {
     if (!isLoading && company === null) {
@@ -51,8 +52,9 @@ function DashboardLayout() {
   }, [isLoading, company])
 
   const handleSignOut = () => {
-    clearToken()
-    navigate({ to: '/auth/sign-in' })
+    signOut.mutate(undefined, {
+      onSettled: () => navigate({ to: '/auth/sign-in' }),
+    })
   }
 
   if (isLoading) {

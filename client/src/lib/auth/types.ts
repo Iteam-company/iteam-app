@@ -27,6 +27,10 @@ export interface ResetPasswordRequest {
   repeatPassword: string
 }
 
+export interface RefreshTokenRequest {
+  refreshToken: string
+}
+
 // ── Responses ─────────────────────────────────────────────────────────────────
 
 export interface AuthUser {
@@ -36,7 +40,13 @@ export interface AuthUser {
 
 export interface AuthResponse {
   accessToken: string
+  refreshToken: string
   user: AuthUser
+}
+
+export interface RefreshResponse {
+  accessToken: string
+  refreshToken: string
 }
 
 export interface MessageResponse {
