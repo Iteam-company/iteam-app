@@ -29,16 +29,20 @@ export class CompanyService {
     if (user.companyId)
       throw new BadRequestException('User already belongs to a company');
 
-    const company = await this.prisma.company.create({
-      data: { ...dto },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const company = await tx.company.create({ data: { ...dto } });
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { companyId: company.id },
-    });
+      const adminRole = await tx.companyRole.create({
+        data: { name: 'Founder', companyId: company.id, permissions: ['ADMIN'] },
+      });
 
-    return company;
+      await tx.user.update({
+        where: { id: userId },
+        data: { companyId: company.id, companyRoleId: adminRole.id },
+      });
+
+      return company;
+    });
   }
 
   // ── Read ──────────────────────────────────────────────────────────────────

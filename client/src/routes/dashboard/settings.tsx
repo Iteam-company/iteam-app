@@ -69,6 +69,8 @@ function SettingsPage() {
     )
   }
 
+  const hasAdminPermission = me.companyRole?.permissions.includes('ADMIN') ?? false
+
   return (
     <main className="flex flex-col gap-4 p-6">
       {/* Hero card */}
@@ -91,10 +93,10 @@ function SettingsPage() {
             <h2 className="text-base font-semibold leading-tight">{me.fullName}</h2>
             <p className="text-sm text-muted-foreground">{me.email}</p>
             <div className="mt-1 flex items-center gap-2">
-              <Badge variant={me.role === 'ADMIN' ? 'default' : 'secondary'} className="text-xs">
-                {me.role === 'ADMIN'
-                  ? <><ShieldCheck className="mr-1 size-3" />Admin</>
-                  : <><User className="mr-1 size-3" />User</>}
+              <Badge variant={hasAdminPermission ? 'default' : 'secondary'} className="text-xs">
+                {hasAdminPermission
+                  ? <><ShieldCheck className="mr-1 size-3" />{me.companyRole?.name}</>
+                  : <><User className="mr-1 size-3" />{me.companyRole?.name ?? 'User'}</>}
               </Badge>
               {me.occupation && <span className="text-xs text-muted-foreground">{me.occupation}</span>}
             </div>
@@ -176,10 +178,10 @@ function SettingsPage() {
               <div className="flex flex-col gap-1.5">
                 <Label>{t('dashboard.settings.role')}</Label>
                 <div className="flex h-9 items-center">
-                  <Badge variant={me.role === 'ADMIN' ? 'default' : 'secondary'}>
-                    {me.role === 'ADMIN'
-                      ? <><ShieldCheck className="mr-1 size-3" />Admin</>
-                      : <><User className="mr-1 size-3" />User</>}
+                  <Badge variant={hasAdminPermission ? 'default' : 'secondary'}>
+                    {hasAdminPermission
+                      ? <><ShieldCheck className="mr-1 size-3" />{me.companyRole?.name}</>
+                      : <><User className="mr-1 size-3" />{me.companyRole?.name ?? 'User'}</>}
                   </Badge>
                 </div>
               </div>

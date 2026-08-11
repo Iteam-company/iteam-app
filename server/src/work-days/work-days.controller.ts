@@ -1,5 +1,13 @@
 import {
-  Body, Controller, Delete, Get, Param, Put, Query, Request, UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Put,
+  Query,
+  Request,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -14,7 +22,9 @@ export class WorkDaysController {
   constructor(private readonly workDays: WorkDaysService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Work days for a month, or the whole year if `month` is omitted' })
+  @ApiOperation({
+    summary: 'Work days for a month, or the whole year if `month` is omitted',
+  })
   getRange(
     @Request() req: any,
     @Query('year') year: string,
@@ -25,7 +35,10 @@ export class WorkDaysController {
   }
 
   @Put(':date')
-  @ApiOperation({ summary: 'Mark a date as an exception (weekend, sick leave, vacation, holiday)' })
+  @ApiOperation({
+    summary:
+      'Mark a date as an exception (weekend, sick leave, vacation, holiday)',
+  })
   upsertDay(
     @Request() req: any,
     @Param('date') date: string,
@@ -35,7 +48,9 @@ export class WorkDaysController {
   }
 
   @Delete(':date')
-  @ApiOperation({ summary: 'Clear an exception, reverting the date to a regular working day' })
+  @ApiOperation({
+    summary: 'Clear an exception, reverting the date to a regular working day',
+  })
   removeDay(@Request() req: any, @Param('date') date: string) {
     return this.workDays.removeDay(req.user.id, date);
   }

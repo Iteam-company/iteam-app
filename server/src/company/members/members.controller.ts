@@ -15,8 +15,8 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { MembersService } from './members.service';
 import {
   GetMembersQueryDto,
+  UpdateMemberCompanyRoleDto,
   UpdateMemberOccupationDto,
-  UpdateMemberRoleDto,
   UpdateMemberSalaryDto,
 } from './dto';
 
@@ -29,23 +29,23 @@ export class MembersController {
 
   @Get()
   @ApiOperation({
-    summary: 'List members — filterable by role, searchable, paginated',
+    summary: 'List members — filterable by company role, searchable, paginated',
   })
   getMembers(@Request() req: any, @Query() query: GetMembersQueryDto) {
     return this.members.getMembers(req.user.id, query);
   }
 
-  @Patch(':id/role')
+  @Patch(':id/company-role')
   @ApiOperation({
     summary:
-      'Change a member role (USER ↔ ADMIN) — admin only, cannot self-target',
+      "Assign or unassign a member's company role — admin only, cannot self-target",
   })
-  updateMemberRole(
+  updateMemberCompanyRole(
     @Request() req: any,
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateMemberRoleDto,
+    @Body() dto: UpdateMemberCompanyRoleDto,
   ) {
-    return this.members.updateMemberRole(req.user.id, id, dto);
+    return this.members.updateMemberCompanyRole(req.user.id, id, dto);
   }
 
   @Patch(':id/occupation')

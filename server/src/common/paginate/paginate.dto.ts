@@ -7,7 +7,7 @@ import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
  *
  * Usage:
  *   class GetMembersQuery extends PaginateDto {
- *     @IsOptional() @IsString() role?: 'USER' | 'ADMIN';
+ *     @IsOptional() @IsInt() companyRoleId?: number;
  *   }
  */
 export class PaginateDto {
@@ -26,7 +26,10 @@ export class PaginateDto {
   @Max(500)
   limit?: number = 20;
 
-  @ApiPropertyOptional({ example: 'alice', description: 'Full-text search term' })
+  @ApiPropertyOptional({
+    example: 'alice',
+    description: 'Full-text search term',
+  })
   @IsOptional()
   @IsString()
   search?: string;

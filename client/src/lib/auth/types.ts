@@ -1,3 +1,5 @@
+import type { CompanyRoleRef } from '#/lib/company/types'
+
 // ── Requests ──────────────────────────────────────────────────────────────────
 
 export interface SignUpRequest {
@@ -30,7 +32,6 @@ export interface ResetPasswordRequest {
 export interface AuthUser {
   id: number
   email: string
-  role: 'USER' | 'ADMIN'
 }
 
 export interface AuthResponse {
@@ -55,8 +56,9 @@ export interface MeResponse {
   fullName: string
   phone: string | null
   occupation: string | null
-  role: 'USER' | 'ADMIN'
   companyId: number | null
+  companyRoleId: number | null
+  companyRole: CompanyRoleRef | null
   statusNote: string | null
   salary?: number | null
 }

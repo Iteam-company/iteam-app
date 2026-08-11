@@ -3,7 +3,7 @@ import { config } from 'dotenv';
 
 config({ path: resolve(__dirname, '../../.env') });
 
-import { PrismaClient, Role } from '../generated/prisma/client';
+import { PrismaClient } from '../generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 
@@ -46,7 +46,15 @@ async function main() {
     });
   }
 
-  console.log(`  ✔ Roles    ${DEFAULT_ROLES.length} default roles`);
+  // Admin authorization now flows through CompanyRole.permissions, not a
+  // Role enum — seed a dedicated permission-bearing role for the admin user.
+  const adminRole = await prisma.companyRole.upsert({
+    where: { name_companyId: { name: 'Admin', companyId: company.id } },
+    update: { permissions: ['ADMIN'] },
+    create: { name: 'Admin', companyId: company.id, permissions: ['ADMIN'] },
+  });
+
+  console.log(`  ✔ Roles    ${DEFAULT_ROLES.length} default roles + Admin`);
 
   // #Users
 
@@ -55,7 +63,6 @@ async function main() {
       email: 'admin@gmail.com',
       password: 'Admin1234!',
       fullName: 'Admin User',
-      role: Role.ADMIN,
       occupation: 'CEO / Директор',
       phone: '+380991234567',
     },
@@ -68,25 +75,23 @@ async function main() {
       where: { email: seed.email },
       update: {
         fullName: seed.fullName,
-        role: seed.role,
         occupation: seed.occupation,
         phone: seed.phone,
         companyId: company.id,
+        companyRoleId: adminRole.id,
       },
       create: {
         email: seed.email,
         password: hashed,
         fullName: seed.fullName,
-        role: seed.role,
         occupation: seed.occupation,
         phone: seed.phone,
         companyId: company.id,
+        companyRoleId: adminRole.id,
       },
     });
 
-    console.log(
-      `  ✔ ${seed.role.padEnd(5)} ${seed.email}  /  ${seed.password}`,
-    );
+    console.log(`  ✔ Admin  ${seed.email}  /  ${seed.password}`);
   }
 
   console.log('✅ Seed complete.');

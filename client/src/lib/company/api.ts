@@ -6,6 +6,7 @@ import type {
   CompanyRole,
   CompanySettings,
   CreateCompanyRequest,
+  CreateRoleRequest,
   InviteResponse,
   InviteUsersRequest,
   MembersQuery,
@@ -13,6 +14,7 @@ import type {
   SendMessageRequest,
   SendMessageResponse,
   UpdateCompanySettingsRequest,
+  UpdateRolePermissionsRequest,
 } from './types'
 
 export const companyApi = {
@@ -29,13 +31,15 @@ export const companyApi = {
     if (q.page) params.set('page', String(q.page))
     if (q.limit) params.set('limit', String(q.limit))
     if (q.search) params.set('search', q.search)
-    if (q.role) params.set('role', q.role)
+    if (q.companyRoleId) params.set('companyRoleId', String(q.companyRoleId))
     if (q.occupation) params.set('occupation', q.occupation)
     const qs = params.toString()
     return api.get<Paginated<CompanyMember>>(`/company/members${qs ? `?${qs}` : ''}`)
   },
-  updateMemberRole: (id: number, role: 'USER' | 'ADMIN') =>
-    api.patch<Pick<CompanyMember, 'id' | 'email' | 'fullName' | 'role'>>(`/company/members/${id}/role`, { role }),
+  updateMemberCompanyRole: (id: number, companyRoleId: number | null) =>
+    api.patch<Pick<CompanyMember, 'id' | 'email' | 'fullName' | 'companyRoleId' | 'companyRole'>>(
+      `/company/members/${id}/company-role`, { companyRoleId },
+    ),
   updateMemberOccupation: (id: number, occupation: string) =>
     api.patch<Pick<CompanyMember, 'id' | 'email' | 'fullName' | 'occupation'>>(`/company/members/${id}/occupation`, { occupation }),
   updateMemberSalary: (id: number, salary: number | null) =>
@@ -44,8 +48,11 @@ export const companyApi = {
     api.delete<{ removed: boolean }>(`/company/members/${id}`),
 
   getRoles: () => api.get<CompanyRole[]>('/company/roles'),
+  addRole: (body: CreateRoleRequest) => api.post<CompanyRole>('/company/roles', body),
   bulkCreateRoles: (body: BulkCreateRolesRequest) =>
     api.post<CompanyRole[]>('/company/roles/bulk', body),
+  updateRolePermissions: (id: number, body: UpdateRolePermissionsRequest) =>
+    api.patch<CompanyRole>(`/company/roles/${id}/permissions`, body),
   deleteRole: (id: number) => api.delete<{ deleted: boolean }>(`/company/roles/${id}`),
 
   invite: (body: InviteUsersRequest) => api.post<InviteResponse>('/company/invite', body),

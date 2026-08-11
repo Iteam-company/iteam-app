@@ -26,7 +26,7 @@ function TeamPage() {
   const { data: me } = useMe()
   const { data: roles } = useCompanyRoles()
   const { data: settings } = useCompanySettings()
-  const isAdmin = me?.role === 'ADMIN'
+  const isAdmin = me?.companyRole?.permissions.includes('ADMIN') ?? false
   const smtpConfigured = !!(settings?.smtpHost && settings?.smtpUser && settings?.smtpPassword)
 
   // ── Filter / pagination state ────────────────────────────────────────────
@@ -49,7 +49,7 @@ function TeamPage() {
   const setOccupation = (occupation: string | undefined) =>
     setQuery((q) => ({ ...q, occupation, page: 1 }))
 
-  const adminCount = members.filter((m) => m.role === 'ADMIN').length
+  const adminCount = members.filter((m) => m.companyRole?.permissions.includes('ADMIN')).length
   const occupationList = roles ?? []
 
   return (
@@ -127,7 +127,7 @@ function TeamPage() {
                   member={member}
                   isAdmin={isAdmin}
                   isSelf={member.id === me?.id}
-                  occupations={occupationList}
+                  companyRoles={occupationList}
                 />
               ))}
             </div>

@@ -12,18 +12,18 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '#/components/ui/select'
 import {
-  useRemoveMember, useUpdateMemberOccupation, useUpdateMemberRole, useUpdateMemberSalary,
+  useRemoveMember, useUpdateMemberCompanyRole, useUpdateMemberOccupation, useUpdateMemberSalary,
 } from '#/lib/company/mutations'
 import type { CompanyMember, CompanyRole } from '#/lib/company/types'
 
-export function MemberRow({ member, isAdmin, isSelf, occupations }: {
+export function MemberRow({ member, isAdmin, isSelf, companyRoles }: {
   member: CompanyMember
   isAdmin: boolean
   isSelf: boolean
-  occupations: CompanyRole[]
+  companyRoles: CompanyRole[]
 }) {
   const { t } = useTranslation()
-  const updateRole = useUpdateMemberRole()
+  const updateCompanyRole = useUpdateMemberCompanyRole()
   const updateOccupation = useUpdateMemberOccupation()
   const updateSalary = useUpdateMemberSalary()
   const removeMember = useRemoveMember()
@@ -31,6 +31,8 @@ export function MemberRow({ member, isAdmin, isSelf, occupations }: {
   const [removing, setRemoving] = useState(false)
   const [salaryEditing, setSalaryEditing] = useState(false)
   const [salaryDraft, setSalaryDraft] = useState('')
+
+  const hasAdminPermission = member.companyRole?.permissions.includes('ADMIN') ?? false
 
   const startSalaryEdit = () => {
     setSalaryDraft(member.salary != null ? String(member.salary) : '')
@@ -85,7 +87,7 @@ export function MemberRow({ member, isAdmin, isSelf, occupations }: {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__none__">—</SelectItem>
-              {occupations.map((r) => (
+              {companyRoles.map((r) => (
                 <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>
               ))}
             </SelectContent>
@@ -127,26 +129,33 @@ export function MemberRow({ member, isAdmin, isSelf, occupations }: {
         </div>
       )}
 
-      {/* Role */}
+      {/* Company role — drives permissions, not just a label */}
       <div>
         {isAdmin && !isSelf ? (
           <Select
-            value={member.role}
-            onValueChange={(v) => updateRole.mutate({ id: member.id, role: v as 'USER' | 'ADMIN' })}
+            value={member.companyRoleId != null ? String(member.companyRoleId) : '__none__'}
+            onValueChange={(v) =>
+              updateCompanyRole.mutate({
+                id: member.id,
+                companyRoleId: v === '__none__' ? null : Number(v),
+              })
+            }
           >
             <SelectTrigger className="h-7 text-xs">
-              <SelectValue />
+              <SelectValue placeholder="—" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="USER">User</SelectItem>
-              <SelectItem value="ADMIN">Admin</SelectItem>
+              <SelectItem value="__none__">—</SelectItem>
+              {companyRoles.map((r) => (
+                <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         ) : (
-          <Badge variant={member.role === 'ADMIN' ? 'default' : 'secondary'} className="text-xs">
-            {member.role === 'ADMIN'
-              ? <><ShieldCheck className="mr-1 size-3" />Admin</>
-              : <><User className="mr-1 size-3" />User</>}
+          <Badge variant={hasAdminPermission ? 'default' : 'secondary'} className="text-xs">
+            {hasAdminPermission
+              ? <><ShieldCheck className="mr-1 size-3" />{member.companyRole?.name}</>
+              : <><User className="mr-1 size-3" />{member.companyRole?.name ?? '—'}</>}
           </Badge>
         )}
       </div>

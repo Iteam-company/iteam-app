@@ -1,7 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CompanyAccessService } from '../company-access.service';
-import { BulkCreateRolesDto, CreateRoleDto } from './dto';
+import {
+  BulkCreateRolesDto,
+  CreateRoleDto,
+  UpdateRolePermissionsDto,
+} from './dto';
 
 @Injectable()
 export class RolesService {
@@ -19,16 +23,16 @@ export class RolesService {
   }
 
   async addRole(userId: number, dto: CreateRoleDto) {
-    const companyId = await this.companyAccess.requireCompany(userId);
+    const companyId = await this.companyAccess.requireAdmin(userId);
     return this.prisma.companyRole.upsert({
       where: { name_companyId: { name: dto.name, companyId } },
       update: {},
-      create: { name: dto.name, companyId },
+      create: { name: dto.name, companyId, permissions: dto.permissions ?? [] },
     });
   }
 
   async bulkCreateRoles(userId: number, dto: BulkCreateRolesDto) {
-    const companyId = await this.companyAccess.requireCompany(userId);
+    const companyId = await this.companyAccess.requireAdmin(userId);
     const results = await Promise.all(
       dto.names.map((name) =>
         this.prisma.companyRole.upsert({
@@ -41,8 +45,24 @@ export class RolesService {
     return results;
   }
 
+  async updateRolePermissions(
+    userId: number,
+    roleId: number,
+    dto: UpdateRolePermissionsDto,
+  ) {
+    const companyId = await this.companyAccess.requireAdmin(userId);
+    const role = await this.prisma.companyRole.findFirst({
+      where: { id: roleId, companyId },
+    });
+    if (!role) throw new NotFoundException('Role not found');
+    return this.prisma.companyRole.update({
+      where: { id: roleId },
+      data: { permissions: dto.permissions },
+    });
+  }
+
   async deleteRole(userId: number, roleId: number) {
-    const companyId = await this.companyAccess.requireCompany(userId);
+    const companyId = await this.companyAccess.requireAdmin(userId);
     const role = await this.prisma.companyRole.findFirst({
       where: { id: roleId, companyId },
     });

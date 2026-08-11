@@ -3,8 +3,10 @@ import { companyApi } from './api'
 import type {
   BulkCreateRolesRequest,
   CreateCompanyRequest,
+  CreateRoleRequest,
   InviteUsersRequest,
   UpdateCompanySettingsRequest,
+  UpdateRolePermissionsRequest,
 } from './types'
 
 export const COMPANY_KEY = ['company', 'me'] as const
@@ -50,6 +52,31 @@ export function useCompanyRoles() {
   })
 }
 
+export function useAddRole() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CreateRoleRequest) => companyApi.addRole(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
+  })
+}
+
+export function useUpdateRolePermissions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateRolePermissionsRequest & { id: number }) =>
+      companyApi.updateRolePermissions(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
+  })
+}
+
+export function useDeleteRole() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => companyApi.deleteRole(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
+  })
+}
+
 export const MEMBERS_KEY = ['company', 'members'] as const
 
 export function useCompanyMembers(query: import('./types').MembersQuery = {}) {
@@ -79,11 +106,11 @@ export function useUpdateMemberSalary() {
   })
 }
 
-export function useUpdateMemberRole() {
+export function useUpdateMemberCompanyRole() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, role }: { id: number; role: 'USER' | 'ADMIN' }) =>
-      companyApi.updateMemberRole(id, role),
+    mutationFn: ({ id, companyRoleId }: { id: number; companyRoleId: number | null }) =>
+      companyApi.updateMemberCompanyRole(id, companyRoleId),
     onSuccess: () => qc.invalidateQueries({ queryKey: MEMBERS_KEY }),
   })
 }

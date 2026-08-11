@@ -21,7 +21,7 @@ export const Route = createFileRoute('/dashboard/company')({ component: CompanyP
 function CompanyPage() {
   const { t } = useTranslation()
   const { data: me, isLoading: meLoading } = useMe()
-  const isAdmin = me?.role === 'ADMIN'
+  const isAdmin = me?.companyRole?.permissions.includes('ADMIN') ?? false
 
   if (meLoading) {
     return (

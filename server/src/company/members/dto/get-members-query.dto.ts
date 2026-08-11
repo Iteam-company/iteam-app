@@ -1,12 +1,17 @@
-import { IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginateDto } from '../../../common/paginate';
 
 export class GetMembersQueryDto extends PaginateDto {
-  @ApiPropertyOptional({ example: 'ADMIN', enum: ['USER', 'ADMIN'] })
+  @ApiPropertyOptional({
+    example: 3,
+    description: 'Filter by assigned CompanyRole id',
+  })
   @IsOptional()
-  @IsString()
-  role?: 'USER' | 'ADMIN';
+  @Type(() => Number)
+  @IsInt()
+  companyRoleId?: number;
 
   @ApiPropertyOptional({
     example: 'Розробник',

@@ -50,7 +50,7 @@ export class AuthService {
       },
     });
 
-    return this.buildTokenResponse(user.id, user.email, user.role);
+    return this.buildTokenResponse(user.id, user.email);
   }
 
   // ── Sign In ──────────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    return this.buildTokenResponse(user.id, user.email, user.role);
+    return this.buildTokenResponse(user.id, user.email);
   }
 
   // ── Forgot Password ───────────────────────────────────────────────────────────
@@ -127,8 +127,9 @@ export class AuthService {
         fullName: true,
         phone: true,
         occupation: true,
-        role: true,
         companyId: true,
+        companyRoleId: true,
+        companyRole: { select: { id: true, name: true, permissions: true } },
       },
     });
   }
@@ -142,8 +143,9 @@ export class AuthService {
         fullName: true,
         phone: true,
         occupation: true,
-        role: true,
         companyId: true,
+        companyRoleId: true,
+        companyRole: { select: { id: true, name: true, permissions: true } },
         statusNote: true,
         salary: true,
       },
@@ -154,11 +156,11 @@ export class AuthService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
-  private buildTokenResponse(id: number, email: string, role: string) {
-    const payload: JwtPayload = { sub: id, email, role };
+  private buildTokenResponse(id: number, email: string) {
+    const payload: JwtPayload = { sub: id, email };
     return {
       accessToken: this.jwt.sign(payload),
-      user: { id, email, role },
+      user: { id, email },
     };
   }
 }

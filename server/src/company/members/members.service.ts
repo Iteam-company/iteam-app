@@ -9,8 +9,8 @@ import { paginate } from '../../common/paginate';
 import { CompanyAccessService } from '../company-access.service';
 import {
   GetMembersQueryDto,
+  UpdateMemberCompanyRoleDto,
   UpdateMemberOccupationDto,
-  UpdateMemberRoleDto,
   UpdateMemberSalaryDto,
 } from './dto';
 
@@ -22,16 +22,19 @@ export class MembersService {
   ) {}
 
   async getMembers(userId: number, query: GetMembersQueryDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { companyRole: true },
+    });
     if (!user?.companyId)
       throw new ForbiddenException('User does not belong to a company');
     const { companyId } = user;
-    const isAdmin = user.role === 'ADMIN';
+    const isAdmin = Boolean(user.companyRole?.permissions.includes('ADMIN'));
 
     const search = query.search?.trim();
     const where = {
       companyId,
-      ...(query.role ? { role: query.role } : {}),
+      ...(query.companyRoleId ? { companyRoleId: query.companyRoleId } : {}),
       ...(query.occupation ? { occupation: query.occupation } : {}),
       ...(search
         ? {
@@ -52,7 +55,8 @@ export class MembersService {
       fullName: true,
       phone: true,
       occupation: true,
-      role: true,
+      companyRoleId: true,
+      companyRole: { select: { id: true, name: true, permissions: true } },
       createdAt: true,
       ...(isAdmin ? { salary: true } : {}),
     };
@@ -81,10 +85,10 @@ export class MembersService {
     });
   }
 
-  async updateMemberRole(
+  async updateMemberCompanyRole(
     userId: number,
     memberId: number,
-    dto: UpdateMemberRoleDto,
+    dto: UpdateMemberCompanyRoleDto,
   ) {
     const companyId = await this.companyAccess.requireAdmin(userId);
     const member = await this.prisma.user.findFirst({
@@ -93,10 +97,24 @@ export class MembersService {
     if (!member) throw new NotFoundException('Member not found');
     if (memberId === userId)
       throw new BadRequestException('Cannot change your own role');
+
+    if (dto.companyRoleId != null) {
+      const role = await this.prisma.companyRole.findFirst({
+        where: { id: dto.companyRoleId, companyId },
+      });
+      if (!role) throw new NotFoundException('Role not found');
+    }
+
     return this.prisma.user.update({
       where: { id: memberId },
-      data: { role: dto.role },
-      select: { id: true, email: true, fullName: true, role: true },
+      data: { companyRoleId: dto.companyRoleId },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        companyRoleId: true,
+        companyRole: { select: { id: true, name: true, permissions: true } },
+      },
     });
   }
 
@@ -127,7 +145,7 @@ export class MembersService {
     if (!member) throw new NotFoundException('Member not found');
     await this.prisma.user.update({
       where: { id: memberId },
-      data: { companyId: null, role: 'USER' },
+      data: { companyId: null, companyRoleId: null },
     });
     return { removed: true };
   }

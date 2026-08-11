@@ -18,7 +18,7 @@ export interface MembersQuery {
   page?: number
   limit?: number
   search?: string
-  role?: 'USER' | 'ADMIN'
+  companyRoleId?: number
   occupation?: string
 }
 
@@ -45,11 +45,31 @@ export interface Company {
   updatedAt: string
 }
 
+// Kept in sync with the CompanyPermission enum in server/prisma/schema.prisma.
+// ADMIN is a blanket grant; the rest are granular and assignable per role.
+// No guard enforces these yet — schema/CRUD only for now.
+export type CompanyPermission =
+  | 'ADMIN'
+  | 'MANAGE_COMPANY'
+  | 'MANAGE_SETTINGS'
+  | 'MANAGE_ROLES'
+  | 'MANAGE_MEMBERS'
+  | 'MANAGE_SALARY'
+  | 'INVITE_MEMBERS'
+  | 'SEND_MESSAGES'
+
 export interface CompanyRole {
   id: number
   name: string
   companyId: number
+  permissions: CompanyPermission[]
   createdAt: string
+}
+
+export interface CompanyRoleRef {
+  id: number
+  name: string
+  permissions: CompanyPermission[]
 }
 
 export interface CompanyMember {
@@ -59,7 +79,8 @@ export interface CompanyMember {
   phone: string | null
   occupation: string | null
   salary?: number | null
-  role: 'USER' | 'ADMIN'
+  companyRoleId: number | null
+  companyRole: CompanyRoleRef | null
   createdAt: string
 }
 
@@ -83,6 +104,15 @@ export interface InviteUsersRequest {
 
 export interface BulkCreateRolesRequest {
   names: string[]
+}
+
+export interface CreateRoleRequest {
+  name: string
+  permissions?: CompanyPermission[]
+}
+
+export interface UpdateRolePermissionsRequest {
+  permissions: CompanyPermission[]
 }
 
 export interface InviteResponse {
