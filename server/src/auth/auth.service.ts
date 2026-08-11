@@ -4,29 +4,43 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  AuthResponseDto,
   ForgotPasswordDto,
+  MeResponseDto,
+  MessageResponseDto,
   ResetPasswordDto,
   SignInDto,
   SignUpDto,
   UpdateProfileDto,
-} from './dto/auth.dto';
-import { JwtPayload } from './jwt.strategy';
+} from './dto';
+import { JwtTokenService } from './jwt-token.service';
+
+const ME_SELECT = {
+  id: true,
+  email: true,
+  fullName: true,
+  phone: true,
+  occupation: true,
+  companyId: true,
+  companyRole: { select: { id: true, name: true, permissions: true } },
+  statusNote: true,
+  salary: true,
+} as const;
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwt: JwtService,
+    private readonly tokens: JwtTokenService,
   ) {}
 
   // ── Sign Up ──────────────────────────────────────────────────────────────────
 
-  async signUp(dto: SignUpDto) {
+  async signUp(dto: SignUpDto): Promise<AuthResponseDto> {
     if (dto.password !== dto.repeatPassword) {
       throw new BadRequestException('Passwords do not match');
     }
@@ -55,7 +69,7 @@ export class AuthService {
 
   // ── Sign In ──────────────────────────────────────────────────────────────────
 
-  async signIn(dto: SignInDto) {
+  async signIn(dto: SignInDto): Promise<AuthResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -69,7 +83,7 @@ export class AuthService {
 
   // ── Forgot Password ───────────────────────────────────────────────────────────
 
-  async forgotPassword(dto: ForgotPasswordDto) {
+  async forgotPassword(dto: ForgotPasswordDto): Promise<MessageResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -91,7 +105,7 @@ export class AuthService {
 
   // ── Reset Password ────────────────────────────────────────────────────────────
 
-  async resetPassword(dto: ResetPasswordDto) {
+  async resetPassword(dto: ResetPasswordDto): Promise<MessageResponseDto> {
     if (dto.password !== dto.repeatPassword) {
       throw new BadRequestException('Passwords do not match');
     }
@@ -117,49 +131,38 @@ export class AuthService {
 
   // ── Me ───────────────────────────────────────────────────────────────────────
 
-  async updateMe(userId: number, dto: UpdateProfileDto) {
-    return this.prisma.user.update({
+  async updateMe(
+    userId: number,
+    dto: UpdateProfileDto,
+  ): Promise<MeResponseDto> {
+    const user = await this.prisma.user.update({
       where: { id: userId },
       data: dto,
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        phone: true,
-        occupation: true,
-        companyId: true,
-        companyRoleId: true,
-        companyRole: { select: { id: true, name: true, permissions: true } },
-      },
+      select: ME_SELECT,
     });
+    return {
+      ...user,
+      salary: user.salary != null ? Number(user.salary) : null,
+    };
   }
 
-  async getMe(userId: number) {
+  async getMe(userId: number): Promise<MeResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        phone: true,
-        occupation: true,
-        companyId: true,
-        companyRoleId: true,
-        companyRole: { select: { id: true, name: true, permissions: true } },
-        statusNote: true,
-        salary: true,
-      },
+      select: ME_SELECT,
     });
     if (!user) throw new NotFoundException('User not found');
-    return user;
+    return {
+      ...user,
+      salary: user.salary != null ? Number(user.salary) : null,
+    };
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
-  private buildTokenResponse(id: number, email: string) {
-    const payload: JwtPayload = { sub: id, email };
+  private buildTokenResponse(id: number, email: string): AuthResponseDto {
     return {
-      accessToken: this.jwt.sign(payload),
+      accessToken: this.tokens.signAccessToken({ sub: id, email }),
       user: { id, email },
     };
   }

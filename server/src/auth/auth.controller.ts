@@ -7,15 +7,23 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import {
+  AuthResponseDto,
   ForgotPasswordDto,
+  MeResponseDto,
+  MessageResponseDto,
   ResetPasswordDto,
   SignInDto,
   SignUpDto,
   UpdateProfileDto,
-} from './dto/auth.dto';
+} from './dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 @ApiTags('Auth')
@@ -25,24 +33,28 @@ export class AuthController {
 
   @Post('sign-up')
   @ApiOperation({ summary: 'Register a new user' })
+  @ApiOkResponse({ type: AuthResponseDto })
   signUp(@Body() dto: SignUpDto) {
     return this.authService.signUp(dto);
   }
 
   @Post('sign-in')
   @ApiOperation({ summary: 'Sign in and receive a JWT' })
+  @ApiOkResponse({ type: AuthResponseDto })
   signIn(@Body() dto: SignInDto) {
     return this.authService.signIn(dto);
   }
 
   @Post('forgot-password')
   @ApiOperation({ summary: 'Request a password reset token' })
+  @ApiOkResponse({ type: MessageResponseDto })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
 
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password using a token' })
+  @ApiOkResponse({ type: MessageResponseDto })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
@@ -51,6 +63,7 @@ export class AuthController {
   @ApiBearerAuth()
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile' })
+  @ApiOkResponse({ type: MeResponseDto })
   me(@Request() req: any) {
     return this.authService.getMe(req.user.id);
   }
@@ -59,6 +72,7 @@ export class AuthController {
   @ApiBearerAuth()
   @Patch('me')
   @ApiOperation({ summary: 'Update current user profile' })
+  @ApiOkResponse({ type: MeResponseDto })
   updateMe(@Request() req: any, @Body() dto: UpdateProfileDto) {
     return this.authService.updateMe(req.user.id, dto);
   }

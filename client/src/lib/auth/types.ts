@@ -57,7 +57,6 @@ export interface MeResponse {
   phone: string | null
   occupation: string | null
   companyId: number | null
-  companyRoleId: number | null
   companyRole: CompanyRoleRef | null
   statusNote: string | null
   salary?: number | null
