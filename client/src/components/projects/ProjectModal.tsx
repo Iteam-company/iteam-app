@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -59,12 +60,18 @@ export function ProjectModal({
 
     try {
       if (!project) {
-        await createProject.mutateAsync({
+        const created = await createProject.mutateAsync({
           name: name.trim(),
           country: country.trim() || null,
           hours: parsedHours,
           holderIds: holders,
           helperIds: helpers,
+        })
+        const people = holders.length + helpers.filter((id) => !holders.includes(id)).length
+        toast.success(t('dashboard.projects.createdToast', { name: created.name }), {
+          description: people
+            ? t('dashboard.projects.createdToastPeople', { count: people })
+            : undefined,
         })
       } else {
         await updateProject.mutateAsync({

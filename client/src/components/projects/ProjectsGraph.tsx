@@ -9,7 +9,7 @@ import type { Project } from '#/lib/projects/types'
 import { buildGraph } from './graph-layout'
 import { GraphActionsContext, nodeTypes } from './nodes'
 import type { GraphActions } from './nodes'
-import { useIsDark } from './use-is-dark'
+import { useIsDark } from '#/hooks/use-is-dark'
 
 // Module-level constants — see the note on nodeTypes in nodes.tsx.
 const DEFAULT_EDGE_OPTIONS = {

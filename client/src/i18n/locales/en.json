@@ -278,7 +278,10 @@
       "save": "Save",
       "cancel": "Cancel",
       "close": "Close",
-      "add": "Add"
+      "add": "Add",
+      "createdToast": "Project «{{name}}» created",
+      "createdToastPeople_one": "{{count}} person connected",
+      "createdToastPeople_other": "{{count}} people connected"
     }
   },
   "me": {
