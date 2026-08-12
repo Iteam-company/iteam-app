@@ -7,6 +7,7 @@ import { RolesModule } from './company/roles/roles.module';
 import { MembersModule } from './company/members/members.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { WorkDaysModule } from './work-days/work-days.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { WorkDaysModule } from './work-days/work-days.module';
     MembersModule,
     NotificationsModule,
     WorkDaysModule,
+    ProjectsModule,
   ],
   controllers: [AppController],
   providers: [],
