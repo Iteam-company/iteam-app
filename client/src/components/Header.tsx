@@ -1,14 +1,11 @@
 import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { Button } from '#/components/ui/button'
+import { toggleLanguage } from '#/i18n'
 import ThemeToggle from './ThemeToggle'
 
 export default function Header() {
   const { i18n } = useTranslation()
-
-  const toggleLanguage = () => {
-    i18n.changeLanguage(i18n.language === 'en' ? 'uk' : 'en')
-  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 px-4 backdrop-blur-lg">

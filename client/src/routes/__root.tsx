@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import {
   HeadContent,
   Scripts,
@@ -14,7 +15,7 @@ import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import appCss from '../styles.css?url'
 
-import '../i18n'
+import { syncStoredLanguage } from '../i18n'
 
 import type { QueryClient } from '@tanstack/react-query'
 
@@ -39,6 +40,14 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 function RootDocument({ children }: { children: React.ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const isDashboard = pathname.startsWith('/dashboard') || pathname.startsWith('/onboarding')
+
+  // Runs once after hydration — safe to read localStorage/apply the real
+  // language here since it's a normal post-mount update, not part of the
+  // hydration pass itself (see i18n/index.ts for why the initial render is
+  // pinned to a fixed language instead of auto-detecting).
+  useEffect(() => {
+    syncStoredLanguage()
+  }, [])
 
   return (
     <html lang="en" suppressHydrationWarning>
