@@ -12,11 +12,16 @@ import { Label } from '#/components/ui/label'
 import { Badge } from '#/components/ui/badge'
 import { useCreateCompany, useBulkCreateRoles, useInviteUsers } from '#/lib/company/mutations'
 import { resolveAuth } from '#/lib/auth/guard'
+import { resolveCompany } from '#/lib/company/guard'
 
 export const Route = createFileRoute('/onboarding')({
   beforeLoad: async ({ context }) => {
     const auth = await resolveAuth(context.queryClient)
     if (auth.status !== 'authenticated') throw redirect({ to: '/auth/sign-in' })
+    // Already has a company — onboarding (create-company) makes no sense
+    // anymore. /dashboard/company is where "create or join" lives now.
+    const company = await resolveCompany(context.queryClient)
+    if (company) throw redirect({ to: '/dashboard/company' })
   },
   component: OnboardingPage,
   ssr: false,
@@ -59,7 +64,6 @@ function OnboardingPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
-  const [companyId, setCompanyId] = useState<number | null>(null)
   const [roles, setRoles] = useState<string[]>([])
   const [roleInput, setRoleInput] = useState('')
   const [emails, setEmails] = useState<string[]>([])
@@ -80,12 +84,11 @@ function OnboardingPage() {
     }),
     onSubmit: async (values, { setStatus }) => {
       try {
-        const company = await createCompany.mutateAsync({
+        await createCompany.mutateAsync({
           title: values.title,
           logo: values.logo || undefined,
           description: values.description || undefined,
         })
-        setCompanyId(company.id)
         setStep(1)
       } catch (err) {
         setStatus(err instanceof Error ? err.message : t('auth.error'))
@@ -128,7 +131,7 @@ function OnboardingPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/30 px-4 py-12">
+    <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center bg-muted/30 px-4 py-12">
       <div className="mb-8 flex flex-col items-center gap-4">
         <span className="text-2xl font-bold tracking-tight">Iteam</span>
         <StepIndicator current={step} />

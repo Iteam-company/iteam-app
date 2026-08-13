@@ -20,7 +20,6 @@
       "fullName": "Full Name",
       "phone": "Phone",
       "dob": "Date of Birth",
-      "occupation": "Occupation / Role",
       "submit": "Create Account",
       "submitting": "Creating account…",
       "haveAccount": "Already have an account?",
@@ -98,7 +97,8 @@
       "roles": "Roles",
       "notifications": "Notifications",
       "me": "My Page",
-      "schedule": "Schedule"
+      "schedule": "Schedule",
+      "requiresCompany": "Join or create a company to unlock this"
     },
     "command": {
       "totalWorkers": "Total workers",
@@ -144,6 +144,13 @@
       "taxGroup": "Tax group",
       "qrPay": "QR Pay",
       "autoAkt": "Auto-Akt"
+    },
+    "company": {
+      "noneTitle": "You're not part of a company yet",
+      "noneDesc": "Create your own company, or join one you've been invited to.",
+      "create": "Create a company",
+      "join": "Join a company",
+      "joinComingSoon": "Joining an existing company is coming soon"
     },
     "settings": {
       "title": "Settings",

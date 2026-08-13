@@ -7,6 +7,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 
 export class SignUpDto {
   @ApiProperty({ example: 'user@example.com' })
@@ -36,6 +37,7 @@ export class SignUpDto {
   @ApiPropertyOptional({ example: '1995-06-15' })
   @IsOptional()
   @IsDateString()
+  @Transform(({ value }) => (value ? new Date(value) : undefined))
   dob?: string;
 
   @ApiPropertyOptional({ example: 'Software Engineer' })

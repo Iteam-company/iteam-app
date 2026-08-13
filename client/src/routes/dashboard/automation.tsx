@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileText, Mail, Plus, Zap } from 'lucide-react'
@@ -10,8 +10,16 @@ import { TemplateCard } from '#/components/automation/TemplateCard'
 import { WorkflowRow } from '#/components/automation/WorkflowRow'
 import { TEMPLATES, WORKFLOWS  } from '#/components/automation/mock-data'
 import type {WorkflowStatus} from '#/components/automation/mock-data';
+import { resolveCompany } from '#/lib/company/guard'
 
-export const Route = createFileRoute('/dashboard/automation')({ component: AutomationPage, ssr: false })
+export const Route = createFileRoute('/dashboard/automation')({
+  beforeLoad: async ({ context }) => {
+    const company = await resolveCompany(context.queryClient)
+    if (!company) throw redirect({ to: '/dashboard/company' })
+  },
+  component: AutomationPage,
+  ssr: false,
+})
 
 function AutomationPage() {
   const { t } = useTranslation()

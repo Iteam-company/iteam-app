@@ -1,11 +1,19 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
 import { Card, CardContent } from '#/components/ui/card'
 import { useMe } from '#/lib/auth/mutations'
+import { resolveCompany } from '#/lib/company/guard'
 import { useMonthData } from '#/lib/workdays/mutations'
 
-export const Route = createFileRoute('/dashboard/me')({ component: MePage, ssr: false })
+export const Route = createFileRoute('/dashboard/me')({
+  beforeLoad: async ({ context }) => {
+    const company = await resolveCompany(context.queryClient)
+    if (!company) throw redirect({ to: '/dashboard/company' })
+  },
+  component: MePage,
+  ssr: false,
+})
 
 function MePage() {
   const { t } = useTranslation()

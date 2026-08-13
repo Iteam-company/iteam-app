@@ -38,7 +38,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const isDashboard = pathname.startsWith('/dashboard') || pathname.startsWith('/onboarding')
+  const isDashboard = pathname.startsWith('/dashboard')
 
   // Runs once after hydration — safe to read localStorage/apply the real
   // language here since it's a normal post-mount update, not part of the
