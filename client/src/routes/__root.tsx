@@ -9,6 +9,7 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
+import { Toaster } from '../components/ui/sonner'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -58,6 +59,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         {!isDashboard && <Header />}
         {children}
         {!isDashboard && <Footer />}
+        <Toaster />
         <TanStackDevtools
           config={{ position: 'bottom-right' }}
           plugins={[

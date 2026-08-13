@@ -25,6 +25,11 @@ enum WorkDayStatus {
   HOLIDAY
 }
 
+enum ProjectRole {
+  HOLDER // owns the project
+  HELPER // helps on the project
+}
+
 enum CompanyPermission {
   ADMIN
   MANAGE_COMPANY
@@ -64,6 +69,7 @@ model User {
   workDays         WorkDay[]
   workEntries      WorkTimeEntry[]
   sessions         Session[]
+  projects         ProjectMember[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -91,6 +97,7 @@ model Company {
   users    User[]
   roles    CompanyRole[]
   settings CompanySettings?
+  projects Project[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -147,6 +154,38 @@ model WorkDay {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, date])
+}
+
+model Project {
+  id      Int     @id @default(autoincrement())
+  name    String
+  country String?
+  hours   Int? // null = fixed price
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId Int
+
+  members ProjectMember[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+/// Join table between Project and User. The composite id means a person is
+/// either a HOLDER or a HELPER on a given project, never both — that is what
+/// keeps the projects graph a tree.
+model ProjectMember {
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId Int
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  role      ProjectRole @default(HELPER)
+  addedAt   DateTime    @default(now())
+
+  @@id([projectId, userId])
+  @@index([userId])
 }
 
 model WorkTimeEntry {
