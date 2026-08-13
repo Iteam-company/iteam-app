@@ -33,7 +33,7 @@ const NAV = [
   { to: '/dashboard/me', label: 'nav.me', icon: User, exact: false, requiresCompany: true },
   { to: '/dashboard/schedule', label: 'nav.schedule', icon: CalendarDays, exact: false, requiresCompany: true },
   { to: '/dashboard/team', label: 'nav.people', icon: Users, exact: false, requiresCompany: true },
-  { to: '/dashboard/projects', label: 'nav.projects', icon: Network, exact: false, soon: false },
+  { to: '/dashboard/projects', label: 'nav.projects', icon: Network, exact: false, soon: false, requiresCompany: true },
   { to: '/dashboard/automation', label: 'nav.automation', icon: Mail, exact: false, requiresCompany: true },
   { to: '/dashboard/company', label: 'nav.company', icon: Building2, exact: false, requiresCompany: false },
 ]
