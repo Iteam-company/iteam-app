@@ -2,8 +2,10 @@ import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  Bell, Building2, CalendarDays, CheckCheck,
-  Home, Lock, LogOut, Mail, Settings, User, Users,
+  CalendarDays,
+  Bell, Building2, CheckCheck,
+  Home, LogOut, Mail, Network, Settings, User, Users,
+  Lock,
 } from 'lucide-react'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
@@ -31,6 +33,7 @@ const NAV = [
   { to: '/dashboard/me', label: 'nav.me', icon: User, exact: false, requiresCompany: true },
   { to: '/dashboard/schedule', label: 'nav.schedule', icon: CalendarDays, exact: false, requiresCompany: true },
   { to: '/dashboard/team', label: 'nav.people', icon: Users, exact: false, requiresCompany: true },
+  { to: '/dashboard/projects', label: 'nav.projects', icon: Network, exact: false, soon: false },
   { to: '/dashboard/automation', label: 'nav.automation', icon: Mail, exact: false, requiresCompany: true },
   { to: '/dashboard/company', label: 'nav.company', icon: Building2, exact: false, requiresCompany: false },
 ]
