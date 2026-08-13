@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import {
   BarChart3, CalendarDays,
   Bell, Building2, CheckCheck,
-  Home, LogOut, Mail, Settings, User, Users,
+  Home, LogOut, Mail, Network, Settings, User, Users,
 } from 'lucide-react'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
