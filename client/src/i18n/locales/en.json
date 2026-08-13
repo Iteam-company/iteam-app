@@ -91,7 +91,6 @@
       "main": "Main",
       "system": "System",
       "overview": "Overview",
-      "okr": "OKR Hub",
       "people": "People",
       "automation": "Automation",
       "settings": "Settings",
@@ -106,15 +105,6 @@
       "activeTeam": "Active team members",
       "teamGrid": "Team vitality",
       "noMembers": "No team members yet"
-    },
-    "okr": {
-      "goalTree": "Goal tree",
-      "nudge": "Nudge settings",
-      "nudgeDesc": "Automated reminders when key results fall behind",
-      "nudgeExample": "Send Telegram nudge when KR progress < 30% for 7 days",
-      "active": "Active",
-      "heatmap": "Completion heatmap",
-      "heatmapDesc": "Weekly task completion per team member"
     },
     "team": {
       "title": "Team",

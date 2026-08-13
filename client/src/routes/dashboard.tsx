@@ -2,7 +2,7 @@ import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  BarChart3, Bell, Building2, CalendarDays, CheckCheck,
+  Bell, Building2, CalendarDays, CheckCheck,
   Home, LogOut, Mail, Settings, User, Users,
 } from 'lucide-react'
 import {
@@ -12,13 +12,16 @@ import {
 } from '#/components/ui/sidebar'
 import { Separator } from '#/components/ui/separator'
 import { Button } from '#/components/ui/button'
+import { toggleLanguage } from '#/i18n'
 import { useMyCompany } from '#/lib/company/mutations'
 import { useSignOut } from '#/lib/auth/mutations'
+import { resolveAuth } from '#/lib/auth/guard'
 import { useMarkAllRead, useMarkRead, useNotifications, useUnreadCount } from '#/lib/notifications/mutations'
 
 export const Route = createFileRoute('/dashboard')({
-  beforeLoad: () => {
-    if (!localStorage.getItem('accessToken')) throw redirect({ to: '/auth/sign-in' })
+  beforeLoad: async ({ context }) => {
+    const auth = await resolveAuth(context.queryClient)
+    if (auth.status !== 'authenticated') throw redirect({ to: '/auth/sign-in' })
   },
   component: DashboardLayout,
   ssr: false,
@@ -28,7 +31,6 @@ const NAV = [
   { to: '/dashboard', label: 'nav.overview', icon: Home, exact: true, soon: false },
   { to: '/dashboard/me', label: 'nav.me', icon: User, exact: false, soon: false },
   { to: '/dashboard/schedule', label: 'nav.schedule', icon: CalendarDays, exact: false, soon: false },
-  { to: '/dashboard/okr', label: 'nav.okr', icon: BarChart3, exact: false, soon: true },
   { to: '/dashboard/team', label: 'nav.people', icon: Users, exact: false, soon: false },
   { to: '/dashboard/automation', label: 'nav.automation', icon: Mail, exact: false, soon: false },
   { to: '/dashboard/company', label: 'nav.company', icon: Building2, exact: false, soon: false },
@@ -160,15 +162,9 @@ function DashboardLayout() {
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton>
-                <Building2 className="size-4 text-muted-foreground" />
-                <span className="truncate text-sm">{company?.title}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
               <div className="flex items-center justify-between px-2 py-1">
                 <Button variant="ghost" size="sm" className="text-xs font-medium uppercase h-7 px-2"
-                  onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'uk' : 'en')}>
+                  onClick={toggleLanguage}>
                   {i18n.language === 'en' ? 'UA' : 'EN'}
                 </Button>
                 <Button variant="ghost" size="sm" className="text-muted-foreground h-7 px-2"

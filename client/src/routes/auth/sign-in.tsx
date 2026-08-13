@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router'
 import { useFormik } from 'formik'
 import { useTranslation } from 'react-i18next'
 import * as Yup from 'yup'
@@ -14,8 +14,13 @@ import {
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { useSignIn } from '#/lib/auth/mutations'
+import { resolveAuth } from '#/lib/auth/guard'
 
 export const Route = createFileRoute('/auth/sign-in')({
+  beforeLoad: async ({ context }) => {
+    const auth = await resolveAuth(context.queryClient)
+    if (auth.status === 'authenticated') throw redirect({ to: '/dashboard' })
+  },
   component: SignInPage,
   ssr: false,
 })
