@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import {
   BarChart3, CalendarDays,
   Bell, Building2, CheckCheck,
-  Home, LogOut, Mail, Network, Settings, User, Users,
+  Home, LogOut, Mail, Network, Settings, User, Users, Wallet,
 } from 'lucide-react'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
@@ -34,6 +34,7 @@ const NAV = [
   { to: '/dashboard/schedule', label: 'nav.schedule', icon: CalendarDays, exact: false, soon: false },
   { to: '/dashboard/okr', label: 'nav.okr', icon: BarChart3, exact: false, soon: true },
   { to: '/dashboard/projects', label: 'nav.projects', icon: Network, exact: false, soon: false },
+  { to: '/dashboard/finances', label: 'nav.finances', icon: Wallet, exact: false, soon: false },
   { to: '/dashboard/team', label: 'nav.people', icon: Users, exact: false, soon: false },
   { to: '/dashboard/automation', label: 'nav.automation', icon: Mail, exact: false, soon: false },
   { to: '/dashboard/company', label: 'nav.company', icon: Building2, exact: false, soon: false },
