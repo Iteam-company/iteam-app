@@ -1,9 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Banknote, Loader2, StickyNote, Wallet } from 'lucide-react'
+import { Banknote, ChevronDown, Loader2, Plus, StickyNote, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '#/components/ui/dropdown-menu'
 import { ConfirmDeleteModal } from '#/components/finances/ConfirmDeleteModal'
 import { NewMonthModal } from '#/components/finances/NewMonthModal'
 import { NodeModal } from '#/components/finances/NodeModal'
@@ -74,6 +78,13 @@ function FinancesPage() {
     [sheets, activeId],
   )
 
+  // Stable identity: this is the canvas context value, and a fresh object each
+  // render would re-render every box's action buttons.
+  const canvasActions = useMemo(
+    () => ({ onEdit: setEditing, onDelete: setDeletingNode }),
+    [],
+  )
+
   const heading =
     active?.kind === 'TEMPLATE'
       ? t('dashboard.finances.template')
@@ -112,38 +123,47 @@ function FinancesPage() {
           </p>
         </div>
 
-        <div className="flex shrink-0 gap-2">
-          <Button size="sm" variant="outline" className="gap-1.5"
-            disabled={!activeId} onClick={() => setAdding('DESTINATION')}>
-            <Wallet className="size-3.5" />
-            {t('dashboard.finances.addDestination')}
-          </Button>
-          <Button size="sm" variant="outline" className="gap-1.5"
-            disabled={!activeId} onClick={() => setAdding('INCOME')}>
-            <Banknote className="size-3.5" />
-            {t('dashboard.finances.addIncome')}
-          </Button>
-          <Button size="sm" variant="outline" className="gap-1.5"
-            disabled={!activeId} onClick={() => setAdding('NOTE')}>
-            <StickyNote className="size-3.5" />
-            {t('dashboard.finances.addNote')}
-          </Button>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" className="shrink-0 gap-1.5" disabled={!activeId}>
+              <Plus className="size-4" />
+              {t('dashboard.finances.addBox')}
+              <ChevronDown className="size-3.5 opacity-70" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuLabel>{t('dashboard.finances.addBox')}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => setAdding('DESTINATION')}>
+              <Wallet className="text-slate-500" />
+              {t('dashboard.finances.addDestination')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setAdding('INCOME')}>
+              <Banknote className="text-emerald-600" />
+              {t('dashboard.finances.addIncome')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setAdding('NOTE')}>
+              <StickyNote className="text-yellow-500" />
+              {t('dashboard.finances.addNote')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
+      {sheet && sheet.nodes.some((n) => n.kind === 'INCOME') && (
+        <div className="px-6 pb-3">
+          <SheetSummary sheet={sheet} />
+        </div>
+      )}
+
       <div className="mx-6 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border">
-        {sheet && <SheetSummary sheet={sheet} />}
         <div className="min-h-0 flex-1">
           {sheetLoading || !sheet ? (
             <div className="flex h-full items-center justify-center">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <SheetCanvas
-              key={sheet.id}
-              sheet={sheet}
-              actions={{ onEdit: setEditing, onDelete: setDeletingNode }}
-            />
+            <SheetCanvas key={sheet.id} sheet={sheet} actions={canvasActions} />
           )}
         </div>
       </div>

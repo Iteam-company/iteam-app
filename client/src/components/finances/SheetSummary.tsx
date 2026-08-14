@@ -1,11 +1,15 @@
 import { useTranslation } from 'react-i18next'
+import { ArrowDownToLine, CircleDashed, Clock, Wallet } from 'lucide-react'
+import { Card, CardContent } from '#/components/ui/card'
 import type { FinanceSheet } from '#/lib/finances/types'
-import { STATUS_DOT, formatAmount, nodeAmount } from './presentation'
+import { formatAmount, nodeAmount } from './presentation'
+
+type Totals = { expected: number; transferred: number; pending: number }
 
 /**
- * The three numbers the sheet exists to answer: how much is expected, how much
- * has landed, and how much is still outstanding. Amounts are grouped by
- * currency so a UAH figure is never added to a USD one.
+ * The four numbers the sheet exists to answer. Amounts are kept per currency
+ * so a UAH figure is never added to a USD one — a card shows one line per
+ * currency in play.
  */
 export function SheetSummary({ sheet }: { sheet: FinanceSheet }) {
   const { t } = useTranslation()
@@ -13,11 +17,7 @@ export function SheetSummary({ sheet }: { sheet: FinanceSheet }) {
   const income = sheet.nodes.filter((n) => n.kind === 'INCOME')
   if (!income.length) return null
 
-  const byCurrency = new Map<
-    string,
-    { expected: number; transferred: number; pending: number }
-  >()
-
+  const byCurrency = new Map<string, Totals>()
   for (const node of income) {
     const key = node.currency ?? '—'
     const bucket = byCurrency.get(key) ?? { expected: 0, transferred: 0, pending: 0 }
@@ -28,44 +28,76 @@ export function SheetSummary({ sheet }: { sheet: FinanceSheet }) {
     byCurrency.set(key, bucket)
   }
 
+  const currencies = [...byCurrency.entries()]
+  const line = (pick: (t: Totals) => number) =>
+    currencies.map(([currency, totals]) => ({
+      currency,
+      text: formatAmount(pick(totals), currency === '—' ? null : currency),
+    }))
+
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-2 text-xs">
-      {[...byCurrency.entries()].map(([currency, totals]) => (
-        <div key={currency} className="flex items-center gap-4">
-          <Stat
-            label={t('dashboard.finances.expected')}
-            value={formatAmount(totals.expected, currency === '—' ? null : currency)}
-          />
-          <Stat
-            label={t('dashboard.finances.status.TRANSFERRED')}
-            value={formatAmount(totals.transferred, currency === '—' ? null : currency)}
-            dot={STATUS_DOT.TRANSFERRED}
-          />
-          <Stat
-            label={t('dashboard.finances.status.PENDING')}
-            value={formatAmount(totals.pending, currency === '—' ? null : currency)}
-            dot={STATUS_DOT.PENDING}
-          />
-          <Stat
-            label={t('dashboard.finances.outstanding')}
-            value={formatAmount(
-              totals.expected - totals.transferred,
-              currency === '—' ? null : currency,
-            )}
-            dot={STATUS_DOT.NOT_TRANSFERRED}
-          />
-        </div>
-      ))}
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StatCard
+        icon={<Wallet className="size-4" />}
+        label={t('dashboard.finances.expected')}
+        values={line((x) => x.expected)}
+      />
+      <StatCard
+        icon={<ArrowDownToLine className="size-4" />}
+        label={t('dashboard.finances.status.TRANSFERRED')}
+        values={line((x) => x.transferred)}
+        accent="text-emerald-600 dark:text-emerald-400"
+        iconClass="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      />
+      <StatCard
+        icon={<Clock className="size-4" />}
+        label={t('dashboard.finances.status.PENDING')}
+        values={line((x) => x.pending)}
+        accent="text-amber-600 dark:text-amber-400"
+        iconClass="bg-amber-500/10 text-amber-600 dark:text-amber-400"
+      />
+      <StatCard
+        icon={<CircleDashed className="size-4" />}
+        label={t('dashboard.finances.outstanding')}
+        values={line((x) => x.expected - x.transferred)}
+        accent="text-rose-600 dark:text-rose-400"
+        iconClass="bg-rose-500/10 text-rose-600 dark:text-rose-400"
+      />
     </div>
   )
 }
 
-function Stat({ label, value, dot }: { label: string; value: string; dot?: string }) {
+function StatCard({
+  icon,
+  label,
+  values,
+  accent,
+  iconClass = 'bg-muted text-muted-foreground',
+}: {
+  icon: React.ReactNode
+  label: string
+  values: { currency: string; text: string }[]
+  accent?: string
+  iconClass?: string
+}) {
   return (
-    <span className="flex items-center gap-1.5">
-      {dot && <span className={`size-2 rounded-full ${dot}`} />}
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-semibold tabular-nums">{value}</span>
-    </span>
+    <Card>
+      <CardContent className="flex items-center gap-3 p-4">
+        <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${iconClass}`}>
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">{label}</p>
+          {values.map(({ currency, text }) => (
+            <p
+              key={currency}
+              className={`truncate text-xl font-semibold tabular-nums leading-tight ${accent ?? ''}`}
+            >
+              {text}
+            </p>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   )
 }

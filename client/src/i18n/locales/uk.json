@@ -338,7 +338,8 @@
         "TRANSFERRED": "Переказано",
         "PENDING": "В процесі",
         "NOT_TRANSFERRED": "Не переказано"
-      }
+      },
+      "addBox": "Додати блок"
     }
   },
   "me": {

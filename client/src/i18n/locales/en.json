@@ -334,7 +334,8 @@
         "TRANSFERRED": "Transferred",
         "PENDING": "Pending",
         "NOT_TRANSFERRED": "Not transferred"
-      }
+      },
+      "addBox": "Add box"
     }
   },
   "me": {

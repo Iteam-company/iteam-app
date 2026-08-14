@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react'
+import { createContext, memo, useContext } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import type { Node, NodeProps } from '@xyflow/react'
 import { useTranslation } from 'react-i18next'
@@ -178,8 +178,11 @@ function NoteNode({ data }: NodeProps<Node<NoteData, 'note'>>) {
 }
 
 // Module scope: a new object each render remounts every node in React Flow.
+// memo matters here: React Flow re-renders nodes on every store update, so
+// without it all boxes re-render on every frame of a drag. `data` identity is
+// stable across position changes, so memoised boxes skip the work entirely.
 export const nodeTypes = {
-  destination: DestinationNode,
-  income: IncomeNode,
-  note: NoteNode,
+  destination: memo(DestinationNode),
+  income: memo(IncomeNode),
+  note: memo(NoteNode),
 }

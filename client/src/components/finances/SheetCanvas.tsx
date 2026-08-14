@@ -7,9 +7,11 @@ import {
   ReactFlow,
   ReactFlowProvider,
   addEdge,
+  applyEdgeChanges,
+  applyNodeChanges,
   useReactFlow,
 } from '@xyflow/react'
-import type { Connection, Edge, Node, NodeChange } from '@xyflow/react'
+import type { Connection, Edge, EdgeChange, Node, NodeChange } from '@xyflow/react'
 import { useTranslation } from 'react-i18next'
 import '@xyflow/react/dist/style.css'
 import { useIsDark } from '#/hooks/use-is-dark'
@@ -68,6 +70,9 @@ function toFlow(sheet: FinanceSheet): { nodes: Node[]; edges: Edge[] } {
     id: String(node.id),
     type: NODE_TYPE_BY_KIND[node.kind],
     position: { x: node.x, y: node.y },
+    // Boxes are removed through the confirm dialog, never by keypress, so a
+    // stray Delete cannot drop one locally without telling the server.
+    deletable: false,
     data:
       node.kind === 'DESTINATION'
         ? { node, ...(totals.get(node.id) ?? { total: 0, received: 0, currency: null }) }
@@ -120,8 +125,16 @@ export function SheetCanvas({
     setEdges(model.edges)
   }, [model])
 
+  // React Flow's own reducer, not a hand-rolled one: it also applies the
+  // `dimensions` changes that carry each box's measured size. Dropping those
+  // makes React Flow re-measure every box on every frame, which is what made
+  // dragging stutter.
   const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes((current) => applyPositionChanges(current, changes))
+    setNodes((current) => applyNodeChanges(changes, current))
+  }, [])
+
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    setEdges((current) => applyEdgeChanges(changes, current))
   }, [])
 
   const onNodeDragStop = useCallback(
@@ -177,6 +190,7 @@ export function SheetCanvas({
             defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
             colorMode={isDark ? 'dark' : 'light'}
             onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
             onNodeDragStop={onNodeDragStop}
             onConnect={onConnect}
             onEdgesDelete={onEdgesDelete}
@@ -196,20 +210,4 @@ export function SheetCanvas({
       </SheetActionsContext.Provider>
     </ReactFlowProvider>
   )
-}
-
-/**
- * Only position changes are applied locally. Additions and removals arrive via
- * the query cache instead, so applying them here too would double them up.
- */
-function applyPositionChanges(current: Node[], changes: NodeChange[]): Node[] {
-  let next = current
-  for (const change of changes) {
-    if (change.type !== 'position' || !change.position) continue
-    const position = change.position
-    next = next.map((node) =>
-      node.id === change.id ? { ...node, position } : node,
-    )
-  }
-  return next
 }
