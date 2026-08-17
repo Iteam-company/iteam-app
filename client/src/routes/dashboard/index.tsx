@@ -1,9 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/components/ui/card'
 import { useCompanyMembers } from '#/lib/company/mutations'
+import { resolveCompany } from '#/lib/company/guard'
 
 export const Route = createFileRoute('/dashboard/')({
+  beforeLoad: async ({ context }) => {
+    const company = await resolveCompany(context.queryClient)
+    if (!company) throw redirect({ to: '/dashboard/company' })
+  },
   component: CommandCenter,
   ssr: false,
 })

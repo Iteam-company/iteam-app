@@ -2,16 +2,17 @@ import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  BarChart3, CalendarDays,
+  CalendarDays,
   Bell, Building2, CheckCheck,
-  Home, LogOut, Mail, Network, Settings, User, Users, Wallet,
+  Wallet,
+  Home, LogOut, Mail, Network, Settings, User, Users,
+  Lock,
 } from 'lucide-react'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
   SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu,
-  SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger,
+  SidebarMenuButton, SidebarMenuItem, SidebarProvider,
 } from '#/components/ui/sidebar'
-import { Separator } from '#/components/ui/separator'
 import { Button } from '#/components/ui/button'
 import { toggleLanguage } from '#/i18n'
 import { useMyCompany } from '#/lib/company/mutations'
@@ -29,15 +30,15 @@ export const Route = createFileRoute('/dashboard')({
 })
 
 const NAV = [
-  { to: '/dashboard', label: 'nav.overview', icon: Home, exact: true, soon: false },
-  { to: '/dashboard/me', label: 'nav.me', icon: User, exact: false, soon: false },
-  { to: '/dashboard/schedule', label: 'nav.schedule', icon: CalendarDays, exact: false, soon: false },
-  { to: '/dashboard/okr', label: 'nav.okr', icon: BarChart3, exact: false, soon: true },
-  { to: '/dashboard/projects', label: 'nav.projects', icon: Network, exact: false, soon: false },
-  { to: '/dashboard/finances', label: 'nav.finances', icon: Wallet, exact: false, soon: false },
-  { to: '/dashboard/team', label: 'nav.people', icon: Users, exact: false, soon: false },
-  { to: '/dashboard/automation', label: 'nav.automation', icon: Mail, exact: false, soon: false },
-  { to: '/dashboard/company', label: 'nav.company', icon: Building2, exact: false, soon: false },
+  { to: '/dashboard', label: 'nav.overview', icon: Home, exact: true, soon: false, requiresCompany: true },
+  { to: '/dashboard/me', label: 'nav.me', icon: User, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/schedule', label: 'nav.schedule', icon: CalendarDays, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/okr', label: 'nav.okr', icon: BarChart3, exact: false, soon: true, requiresCompany: true },
+  { to: '/dashboard/projects', label: 'nav.projects', icon: Network, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/finances', label: 'nav.finances', icon: Wallet, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/team', label: 'nav.people', icon: Users, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/automation', label: 'nav.automation', icon: Mail, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/company', label: 'nav.company', icon: Building2, exact: false, soon: false, requiresCompany: false },
 ]
 
 const NAV_SYSTEM = [
@@ -50,12 +51,6 @@ function DashboardLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { data: company, isLoading } = useMyCompany()
   const signOut = useSignOut()
-
-  useEffect(() => {
-    if (!isLoading && company === null) {
-      navigate({ to: '/onboarding' })
-    }
-  }, [isLoading, company])
 
   const handleSignOut = () => {
     signOut.mutate(undefined, {
@@ -113,13 +108,14 @@ function DashboardLayout() {
             <SidebarGroupLabel>{t('dashboard.nav.main')}</SidebarGroupLabel>
             <SidebarMenu>
               {NAV.map((item) => {
-                const active = !item.soon && (
+                const locked = item.requiresCompany && !company
+                const active = !locked && (
                   item.exact ? pathname === item.to : pathname.startsWith(item.to)
                 );
 
                 return (
                   <SidebarMenuItem key={item.to}>
-                    {!item.soon ? (
+                    {!locked ? (
                       <SidebarMenuButton asChild isActive={active}>
                         <Link to={item.to}>
                           <item.icon />
@@ -127,14 +123,16 @@ function DashboardLayout() {
                         </Link>
                       </SidebarMenuButton>
                     ) : (
-                      <SidebarMenuButton disabled className="justify-between">
+                      <SidebarMenuButton
+                        disabled
+                        className="justify-between"
+                        title={t('dashboard.nav.requiresCompany')}
+                      >
                         <span className="flex items-center gap-2">
                           <item.icon />
                           {t(`dashboard.${item.label}`)}
                         </span>
-                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                          soon
-                        </span>
+                        <Lock className="size-3 text-muted-foreground" />
                       </SidebarMenuButton>
                     )}
                   </SidebarMenuItem>
@@ -184,9 +182,7 @@ function DashboardLayout() {
 
       <SidebarInset>
         <header className="flex h-14 items-center gap-3 border-b border-border px-4">
-          <SidebarTrigger />
-          <Separator orientation="vertical" className="h-5" />
-          <span className="text-sm font-medium flex-1">{activeLabel}</span>
+          <span className="text-sm font-medium flex-1 select-none">{activeLabel}</span>
           <NotificationBell />
         </header>
         <Outlet />

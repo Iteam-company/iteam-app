@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { List, Loader2, Network, Plus } from 'lucide-react'
@@ -12,8 +12,13 @@ import { ProjectsGraph } from '#/components/projects/ProjectsGraph'
 import { ProjectsList } from '#/components/projects/ProjectsList'
 import { useProjects, useRemoveProjectMember } from '#/lib/projects/mutations'
 import type { Project, ProjectRole } from '#/lib/projects/types'
+import { resolveCompany } from '#/lib/company/guard'
 
 export const Route = createFileRoute('/dashboard/projects')({
+  beforeLoad: async ({ context }) => {
+    const company = await resolveCompany(context.queryClient)
+    if (!company) throw redirect({ to: '/dashboard/company' })
+  },
   component: ProjectsPage,
   ssr: false,
 })

@@ -54,7 +54,6 @@ function SignUpPage() {
       fullName: '',
       phone: '',
       dob: '',
-      occupation: '',
     },
     validationSchema,
     onSubmit: async (values, { setStatus }) => {
@@ -74,7 +73,7 @@ function SignUpPage() {
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12">
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-2xl">
         <CardHeader>
           <CardTitle>{t('auth.signUp.title')}</CardTitle>
           <CardDescription>{t('auth.signUp.subtitle')}</CardDescription>
@@ -118,14 +117,6 @@ function SignUpPage() {
                 <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
               </Label>
               <Input id="dob" type="date" {...field('dob')} />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="occupation">
-                {t('auth.signUp.occupation')}
-                <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
-              </Label>
-              <Input id="occupation" type="text" autoComplete="organization-title" {...field('occupation')} />
             </div>
 
             <div className="flex flex-col gap-1.5">

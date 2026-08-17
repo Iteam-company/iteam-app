@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -12,12 +12,20 @@ import { InviteModal } from '#/components/team/InviteModal'
 import { MemberRow } from '#/components/team/MemberRow'
 import { MetricCard } from '#/components/team/MetricCard'
 import { useMe } from '#/lib/auth/mutations'
+import { resolveCompany } from '#/lib/company/guard'
 import {
   useCompanyMembers, useCompanyRoles, useCompanySettings,
 } from '#/lib/company/mutations'
 import type { MembersQuery } from '#/lib/company/types'
 
-export const Route = createFileRoute('/dashboard/team')({ component: TeamPage, ssr: false })
+export const Route = createFileRoute('/dashboard/team')({
+  beforeLoad: async ({ context }) => {
+    const company = await resolveCompany(context.queryClient)
+    if (!company) throw redirect({ to: '/dashboard/company' })
+  },
+  component: TeamPage,
+  ssr: false,
+})
 
 const LIMIT = 10
 
