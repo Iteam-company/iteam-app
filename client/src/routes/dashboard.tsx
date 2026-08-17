@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import {
   CalendarDays,
   Bell, Building2, CheckCheck,
+  Wallet,
   Home, LogOut, Mail, Network, Settings, User, Users,
   Lock,
 } from 'lucide-react'
@@ -29,13 +30,15 @@ export const Route = createFileRoute('/dashboard')({
 })
 
 const NAV = [
-  { to: '/dashboard', label: 'nav.overview', icon: Home, exact: true, requiresCompany: true },
-  { to: '/dashboard/me', label: 'nav.me', icon: User, exact: false, requiresCompany: true },
-  { to: '/dashboard/schedule', label: 'nav.schedule', icon: CalendarDays, exact: false, requiresCompany: true },
-  { to: '/dashboard/team', label: 'nav.people', icon: Users, exact: false, requiresCompany: true },
+  { to: '/dashboard', label: 'nav.overview', icon: Home, exact: true, soon: false, requiresCompany: true },
+  { to: '/dashboard/me', label: 'nav.me', icon: User, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/schedule', label: 'nav.schedule', icon: CalendarDays, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/okr', label: 'nav.okr', icon: BarChart3, exact: false, soon: true, requiresCompany: true },
   { to: '/dashboard/projects', label: 'nav.projects', icon: Network, exact: false, soon: false, requiresCompany: true },
-  { to: '/dashboard/automation', label: 'nav.automation', icon: Mail, exact: false, requiresCompany: true },
-  { to: '/dashboard/company', label: 'nav.company', icon: Building2, exact: false, requiresCompany: false },
+  { to: '/dashboard/finances', label: 'nav.finances', icon: Wallet, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/team', label: 'nav.people', icon: Users, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/automation', label: 'nav.automation', icon: Mail, exact: false, soon: false, requiresCompany: true },
+  { to: '/dashboard/company', label: 'nav.company', icon: Building2, exact: false, soon: false, requiresCompany: false },
 ]
 
 const NAV_SYSTEM = [

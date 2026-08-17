@@ -30,6 +30,30 @@ enum ProjectRole {
   HELPER // helps on the project
 }
 
+enum FinanceSheetKind {
+  TEMPLATE // the reusable skeleton a new month is cloned from
+  MONTH
+}
+
+enum FinanceNodeKind {
+  DESTINATION
+  INCOME
+  NOTE
+}
+
+enum FinanceDestinationType {
+  PAYPAL
+  PAYONEER
+  BANK_FOP // FOP bank account (Ukraine)
+  OTHER // free-form, uses `label`
+}
+
+enum FinanceIncomeStatus {
+  NOT_TRANSFERRED
+  PENDING
+  TRANSFERRED
+}
+
 enum CompanyPermission {
   ADMIN
   MANAGE_COMPANY
@@ -57,7 +81,7 @@ model User {
   resetTokenExpiry DateTime?
 
   // Status / working-on
-  statusNote       String?
+  statusNote String?
 
   company   Company? @relation(fields: [companyId], references: [id])
   companyId Int?
@@ -65,11 +89,11 @@ model User {
   companyRole   CompanyRole? @relation(fields: [companyRoleId], references: [id], onDelete: SetNull)
   companyRoleId Int?
 
-  notifications    Notification[]
-  workDays         WorkDay[]
-  workEntries      WorkTimeEntry[]
-  sessions         Session[]
-  projects         ProjectMember[]
+  notifications Notification[]
+  workDays      WorkDay[]
+  workEntries   WorkTimeEntry[]
+  sessions      Session[]
+  projects      ProjectMember[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -94,10 +118,11 @@ model Company {
   logo        String?
   description String?
 
-  users    User[]
-  roles    CompanyRole[]
-  settings CompanySettings?
-  projects Project[]
+  users         User[]
+  roles         CompanyRole[]
+  settings      CompanySettings?
+  projects      Project[]
+  financeSheets FinanceSheet[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -144,11 +169,11 @@ model Notification {
 }
 
 model WorkDay {
-  id        Int           @id @default(autoincrement())
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    Int
-  date      DateTime      @db.Date
-  status    WorkDayStatus
+  id     Int           @id @default(autoincrement())
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+  date   DateTime      @db.Date
+  status WorkDayStatus
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -165,7 +190,8 @@ model Project {
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   companyId Int
 
-  members ProjectMember[]
+  members      ProjectMember[]
+  financeNodes FinanceNode[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -188,16 +214,101 @@ model ProjectMember {
   @@index([userId])
 }
 
-model WorkTimeEntry {
-  id            Int           @id @default(autoincrement())
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId        Int
-  // project       Project?
-  description   String?
-  date          DateTime      @db.Date
-  startTime     String?
-  endTime       String?
+/// One month of money movement, drawn as a diagram. The TEMPLATE sheet holds
+/// the skeleton (destinations, recurring income sources, notes and their
+/// layout) that "new month" clones so nothing is refilled from scratch.
+model FinanceSheet {
+  id        Int              @id @default(autoincrement())
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId Int
+  kind      FinanceSheetKind @default(MONTH)
+  /// Both null on the TEMPLATE sheet.
+  year      Int?
+  month     Int? // 1-12
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  nodes FinanceNode[]
+  edges FinanceEdge[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Keeps a month unique per company. Postgres treats NULLs as distinct, so
+  /// this does not constrain TEMPLATE rows — the service enforces one template
+  /// per company instead.
+  @@unique([companyId, year, month])
+  @@index([companyId])
+}
+
+/// One box on a sheet. Single table with a `kind` discriminator so positions
+/// and edges can reference any box by one id; the service validates that only
+/// the fields belonging to `kind` are set.
+model FinanceNode {
+  id      Int             @id @default(autoincrement())
+  sheet   FinanceSheet    @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  sheetId Int
+  kind    FinanceNodeKind
+
+  // Canvas position — this board is arranged by hand, so it is persisted.
+  x Float @default(0)
+  y Float @default(0)
+
+  // DESTINATION
+  destinationType FinanceDestinationType?
+
+  // DESTINATION: custom name when type is OTHER.
+  // INCOME: snapshot of the project name so the box still reads correctly if
+  // the project is later deleted.
+  label String?
+
+  // INCOME
+  project   Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId Int?
+  amount    Decimal?             @db.Decimal(12, 2)
+  currency  String?              @db.VarChar(3)
+  /// Exact date when `dateTo` is null, otherwise the start of the range.
+  dateFrom  DateTime?            @db.Date
+  dateTo    DateTime?            @db.Date
+  status    FinanceIncomeStatus?
+
+  // NOTE
+  text String?
+
+  outgoing FinanceEdge[] @relation("FinanceEdgeSource")
+  incoming FinanceEdge[] @relation("FinanceEdgeTarget")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sheetId])
+  @@index([projectId])
+}
+
+/// A hand-drawn money flow, normally income source -> destination.
+model FinanceEdge {
+  id       Int          @id @default(autoincrement())
+  sheet    FinanceSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  sheetId  Int
+  source   FinanceNode  @relation("FinanceEdgeSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId Int
+  target   FinanceNode  @relation("FinanceEdgeTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  targetId Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([sourceId, targetId])
+  @@index([sheetId])
+}
+
+model WorkTimeEntry {
+  id          Int      @id @default(autoincrement())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      Int
+  // project       Project?
+  description String?
+  date        DateTime @db.Date
+  startTime   String?
+  endTime     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
